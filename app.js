@@ -1,430 +1,66 @@
-const M=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 
-const def=[
-{name:"Exercise",archived:false,type:"personal"},
-{name:"Walk",archived:false,type:"personal"},
-{name:"Read",archived:false,type:"personal"},
-{name:"Podcast",archived:false,type:"personal"},
-{name:"Sleep 7+",archived:false,type:"personal"},
-{name:"Cold Shower",archived:false,type:"personal"},
-{name:"No Alcohol",archived:false,type:"personal"},
-{name:"Plan Day",archived:false,type:"work"}
-];
-
-const logDate=new Date(Date.now()-86400000);
-const logKey=k(logDate);
-let selected=logKey;
-
-let store=JSON.parse(localStorage.getItem("habitV251"))||{};
-let meta=JSON.parse(localStorage.getItem("habitMetaV34"))||{baselineWeight:"",goals:[]};
-
-function k(d){return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")}
-function p(key){const [y,m]=key.split("-").map(Number);return new Date(y,m-1,1)}
-function daysInMonth(key){const d=p(key);return new Date(d.getFullYear(),d.getMonth()+1,0).getDate()}
-function fmtDate(d){return d.getDate()+" "+M[d.getMonth()]+" "+d.getFullYear()}
-function fmtMonth(key){const d=p(key);return M[d.getMonth()]+" "+d.getFullYear()}
-function esc(t){return String(t).replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;")}
+const MONTHS=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+const DEFAULT_HABITS=[{name:"Exercise",archived:false,type:"personal"},{name:"Walk",archived:false,type:"personal"},{name:"Read",archived:false,type:"personal"},{name:"Podcast",archived:false,type:"personal"},{name:"Sleep 7+",archived:false,type:"personal"},{name:"Cold Shower",archived:false,type:"personal"},{name:"No Alcohol",archived:false,type:"personal"},{name:"Plan Day",archived:false,type:"work"}];
+const DEFAULT_LOG_DATE=new Date(Date.now()-86400000);
+const CURRENT_MONTH_KEY=monthKey(DEFAULT_LOG_DATE);
+let selectedMonthKey=CURRENT_MONTH_KEY, selectedDay=getSafeDefaultDay(selectedMonthKey), currentTab="today", store=JSON.parse(localStorage.getItem("habitV251"))||{}, meta=loadMeta(), toastState=null;
+function loadMeta(){const raw=JSON.parse(localStorage.getItem("habitMetaV35"))||JSON.parse(localStorage.getItem("habitMetaV34"))||JSON.parse(localStorage.getItem("habitMetaV33"))||{};return {baselineWeight:raw.baselineWeight||"",goals:Array.isArray(raw.goals)?raw.goals:[],weightUnit:raw.weightUnit||"kg"}}
+function monthKey(d){return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")}
+function monthDate(key){const [y,m]=key.split("-").map(Number);return new Date(y,m-1,1)}
+function daysInMonth(key){const d=monthDate(key);return new Date(d.getFullYear(),d.getMonth()+1,0).getDate()}
+function formatDate(d){return d.getDate()+" "+MONTHS[d.getMonth()]+" "+d.getFullYear()}
+function formatMonth(key){const d=monthDate(key);return MONTHS[d.getMonth()]+" "+d.getFullYear()}
+function escapeHtml(t){return String(t).replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;")}
 function clone(o){return JSON.parse(JSON.stringify(o))}
-function prev(key){const d=p(key);d.setMonth(d.getMonth()-1);return k(d)}
+function previousMonthKey(key){const d=monthDate(key);d.setMonth(d.getMonth()-1);return monthKey(d)}
 function monthKeys(){return Object.keys(store).sort().reverse()}
-
-function ensure(key){
-  if(store[key]) {
-    if(!store[key].habits) store[key].habits=clone(def);
-    if(!store[key].days) store[key].days={};
-    if(!store[key].weight) store[key].weight={};
-    if(!store[key].moments) store[key].moments={};
-    store[key].habits.forEach(h=>{ if(!h.type) h.type="personal"; if(h.archived===undefined) h.archived=false; });
-    return;
-  }
-  const pk=prev(key);
-  const prevHabits=clone(store[pk]?.habits||def);
-  prevHabits.forEach(h=>{ if(!h.type) h.type="personal"; if(h.archived===undefined) h.archived=false; });
-  store[key]={habits:prevHabits,days:{},weight:{},moments:{}}
-}
-
-ensure(logKey);
-if(!Array.isArray(meta.goals)) meta.goals=[];
-
-function save(){
-  localStorage.setItem("habitV251",JSON.stringify(store));
-  localStorage.setItem("habitMetaV34",JSON.stringify(meta));
-}
-
-function data(key=selected){
-  ensure(key);
-  return store[key];
-}
-
-function activeForDate(h,dateObj){
-  const day=dateObj.getDay();
-  const weekend=(day===0||day===6);
-  if(h.type==="work" && weekend) return false;
-  return true;
-}
-
-function activeToday(h){
-  return activeForDate(h, logDate);
-}
-
-function toggleHabit(name,day){
-  const d=data();
-  d.days[day]=d.days[day]||[];
-  d.days[day]=d.days[day].includes(name)
-  ?d.days[day].filter(x=>x!==name)
-  :[...d.days[day],name];
-  save();
-  showToday();
-}
-
-function setWeight(v,day){
-  const d=data();
-  d.weight[day]=v;
-  save();
-}
-
-function setMoment(v,day){
-  const d=data();
-  d.moments[day]=v;
-  save();
-}
-
-function monthSelector(){
-  const keys=monthKeys();
-  return `<div class="card month-picker"><label><strong>Month</strong></label><select onchange="changeMonth(this.value)">${keys.map(x=>`<option value="${x}" ${x===selected?'selected':''}>${fmtMonth(x)}</option>`).join("")}</select></div>`;
-}
-
-function maxLoggedDay(key){
-  if(key===logKey) return logDate.getDate();
-  return daysInMonth(key);
-}
-
-function score(key=selected){
-  const d=data(key);
-  let total=0, done=0;
-  for(let i=1;i<=maxLoggedDay(key);i++){
-    const dateObj=p(key); dateObj.setDate(i);
-    const habits=d.habits.filter(h=>!h.archived && activeForDate(h,dateObj));
-    habits.forEach(h=>{
-      total++;
-      if(d.days[i]?.includes(h.name)) done++;
-    });
-  }
-  return total?Math.round(done/total*100):0;
-}
-
-function dayComplete(key,day){
-  const d=data(key);
-  const dateObj=p(key); dateObj.setDate(day);
-  const habits=d.habits.filter(h=>!h.archived && activeForDate(h,dateObj));
-  return habits.length>0 && habits.every(h=>d.days[day]?.includes(h.name));
-}
-
-function curStreak(key=selected){
-  let s=0;
-  for(let i=maxLoggedDay(key);i>=1;i--){
-    if(dayComplete(key,i)) s++;
-    else break;
-  }
-  return s;
-}
-
-function bestStreak(key=selected){
-  let b=0,c=0;
-  for(let i=1;i<=maxLoggedDay(key);i++){
-    if(dayComplete(key,i)){ c++; if(c>b) b=c; }
-    else c=0;
-  }
-  return b;
-}
-
-function summaryCards(){
-  return `<div class="score-grid">
-    <div class="metric">${score()}%<small>Month Score</small></div>
-    <div class="metric">${curStreak()}<small>Current Streak</small></div>
-    <div class="metric">${bestStreak()}<small>Best Streak</small></div>
-  </div>`;
-}
-
-function showToday(){
-  const d=data();
-  const day=logDate.getDate();
-  let h=`<div class="card"><strong>Yesterday</strong><br>${fmtDate(logDate)}</div>`;
-
-  const personal=d.habits.filter(x=>!x.archived && x.type!=="work" && activeToday(x));
-  const work=d.habits.filter(x=>!x.archived && x.type==="work" && activeToday(x));
-
-  if(personal.length){
-    h+=`<div class="section-title">PERSONAL</div>`;
-    personal.forEach(x=>{
-      const done=d.days[day]?.includes(x.name);
-      h+=`<div class="habit" onclick='toggleHabit(${JSON.stringify(x.name)},${day})'>
-      <div class="dot ${done?"done":""}"></div>
-      <div>${esc(x.name)}</div>
-      </div>`;
-    });
-  }
-
-  if(work.length){
-    h+=`<div class="section-title">WORK</div>`;
-    work.forEach(x=>{
-      const done=d.days[day]?.includes(x.name);
-      h+=`<div class="habit" onclick='toggleHabit(${JSON.stringify(x.name)},${day})'>
-      <div class="dot ${done?"done":""}"></div>
-      <div>${esc(x.name)}</div>
-      </div>`;
-    });
-  }
-
-  h+=`<div class="card">
-  <h3>Weight</h3>
-  <input type="number" step="0.1" value="${d.weight[day]||""}" onchange="setWeight(this.value,${day})">
-  <h3>Memorable Moment</h3>
-  <textarea onchange="setMoment(this.value,${day})">${d.moments[day]||""}</textarea>
-  </div>`;
-
-  document.getElementById("content").innerHTML=h;
-}
-
-function weightSummary(){
-  const d=data();
-  const entries=Object.keys(d.weight).sort((a,b)=>Number(a)-Number(b)).filter(k=>String(d.weight[k]).trim()!=="");
-  const current=entries.length?Number(d.weight[entries[entries.length-1]]):null;
-  const baseline=meta.baselineWeight!==""?Number(meta.baselineWeight):null;
-  let change=null;
-  if(current!==null && baseline!==null && !Number.isNaN(current) && !Number.isNaN(baseline)){
-    change=(current-baseline).toFixed(1);
-  }
-  return {entries,current,baseline,change};
-}
-
-function weightCards(){
-  const {current,baseline,change}=weightSummary();
-  return `<div class="card">
-    <h3>Weight</h3>
-    <div class="weight-grid">
-      <div class="metric">${current!==null && !Number.isNaN(current)?current.toFixed(1):"—"}<small>Current</small></div>
-      <div class="metric">${baseline!==null && !Number.isNaN(baseline)?baseline.toFixed(1):"—"}<small>Baseline</small></div>
-      <div class="metric">${change!==null?(change>0?"+":"")+change:"—"}<small>Change</small></div>
-    </div>
-  </div>`;
-}
-
-function weightChart(){
-  const d=data();
-  const entries=Object.keys(d.weight).sort((a,b)=>Number(a)-Number(b)).filter(k=>String(d.weight[k]).trim()!=="");
-  if(entries.length<2){
-    return `<div class="card"><h3>Weight Trend</h3><div class="muted">Add at least 2 weight entries to see a trend.</div></div>`;
-  }
-  const values=entries.map(k=>Number(d.weight[k])).filter(v=>!Number.isNaN(v));
-  if(values.length<2){
-    return `<div class="card"><h3>Weight Trend</h3><div class="muted">Not enough valid weight entries yet.</div></div>`;
-  }
-  const min=Math.min(...values);
-  const max=Math.max(...values);
-  const range=max-min || 1;
-  const width=320, height=180, pad=18;
-  const points=values.map((v,i)=>{
-    const x=pad + (i*(width-pad*2))/Math.max(values.length-1,1);
-    const y=height-pad - ((v-min)/range)*(height-pad*2);
-    return `${x},${y}`;
-  }).join(" ");
-  const circles=values.map((v,i)=>{
-    const x=pad + (i*(width-pad*2))/Math.max(values.length-1,1);
-    const y=height-pad - ((v-min)/range)*(height-pad*2);
-    return `<circle cx="${x}" cy="${y}" r="3" fill="#007AFF"></circle>`;
-  }).join("");
-  return `<div class="card"><h3>Weight Trend</h3>
-    <svg class="chart" viewBox="0 0 320 180" preserveAspectRatio="none">
-      <line x1="18" y1="162" x2="302" y2="162" stroke="#ddd" stroke-width="1"></line>
-      <polyline fill="none" stroke="#007AFF" stroke-width="3" points="${points}"></polyline>
-      ${circles}
-    </svg>
-    <div class="muted">Latest ${values.length} entries this month.</div>
-  </div>`;
-}
-
-function goalCard(){
-  if(!meta.goals.length){
-    return `<div class="card"><h3>Goals</h3><div class="muted">No goals added yet.</div></div>`;
-  }
-  return `<div class="card"><h3>Goals</h3>${meta.goals.map((g,i)=>`
-    <div class="goal-row">
-      <div>${esc(g.text)}<div class="goal-chip">${g.progress || ""}</div></div>
-      <div>${g.done?"✅":"•"}</div>
-    </div>
-  `).join("")}</div>`;
-}
-
-function monthGrid(){
-  const d=data();
-  let h=`<div class="card"><h3>Month View</h3><div class="muted">Scroll sideways to see the whole month.</div></div>`;
-  h+=`<div class="grid-wrap"><table><tr><th class="habit-name"></th>`;
-  for(let i=1;i<=daysInMonth(selected);i++) h+=`<th>${i}</th>`;
-  h+=`</tr>`;
-  const hi=selected===logKey?logDate.getDate():-1;
-  d.habits.filter(h=>!h.archived).forEach(x=>{
-    h+=`<tr><th class="habit-name">${esc(x.name)}</th>`;
-    for(let i=1;i<=daysInMonth(selected);i++){
-      const done=d.days[i]?.includes(x.name);
-      h+=`<td class="cell ${done?'done-cell':'empty-cell'} ${i===hi?'today-cell':''}">${done?'•':''}</td>`;
-    }
-    h+=`</tr>`;
-  });
-  h+=`</table></div>`;
-  return h;
-}
-
-function showProgress(){
-  let h=monthSelector();
-  h+=summaryCards();
-  h+=goalCard();
-  h+=weightCards();
-  h+=weightChart();
-  h+=monthGrid();
-  document.getElementById("content").innerHTML=h;
-}
-
-function showLife(){
-  const d=data();
-  let h=monthSelector()+`<div class="card"><h3>Memorable Moments</h3>`;
-  const e=Object.keys(d.moments).sort((a,b)=>Number(b)-Number(a));
-  let hasRows=false;
-  e.forEach(i=>{
-    if(!String(d.moments[i]).trim()) return;
-    hasRows=true;
-    const dt=p(selected); dt.setDate(Number(i));
-    h+=`<div class="list-line"><strong>${fmtDate(dt)}</strong><br>${esc(d.moments[i])}</div>`;
-  });
-  if(!hasRows) h+=`<div class="muted">No memorable moments yet.</div>`;
-  h+=`</div>`;
-  document.getElementById("content").innerHTML=h;
-}
-
-function toggleHabitType(i){
-  const d=data();
-  d.habits[i].type=d.habits[i].type==="work"?"personal":"work";
-  save();
-  showSettings();
-}
-
-function archiveHabit(i){
-  const d=data();
-  d.habits[i].archived=true;
-  save();
-  showSettings();
-}
-
-function addHabit(){
-  const name=document.getElementById("newHabit").value.trim();
-  const type=document.getElementById("habitType").value;
-  if(!name) return;
-  const d=data();
-  d.habits.push({name:name,archived:false,type:type});
-  save();
-  showSettings();
-}
-
-function exportData(){
-  const payload={store:store,meta:meta};
-  const s="data:text/json;charset=utf-8,"+encodeURIComponent(JSON.stringify(payload));
-  const a=document.createElement("a");
-  a.href=s;
-  a.download="habit-backup.json";
-  a.click();
-}
-
-function importData(e){
-  const file=e.target.files[0];
-  if(!file) return;
-  const reader=new FileReader();
-  reader.onload=function(){
-    const parsed=JSON.parse(reader.result);
-    if(parsed.store){
-      store=parsed.store;
-      meta=parsed.meta || meta;
-    }else{
-      store=parsed;
-    }
-    Object.keys(store).forEach(key=>ensure(key));
-    ensure(logKey);
-    if(!meta || typeof meta!=="object") meta={baselineWeight:"",goals:[]};
-    if(!Array.isArray(meta.goals)) meta.goals=[];
-    save();
-    alert("Backup imported successfully");
-    showToday();
-  };
-  reader.readAsText(file);
-}
-
-function setBaselineWeight(v){
-  meta.baselineWeight=v;
-  save();
-}
-
-function saveGoals(){
-  const text=document.getElementById("goalsText").value;
-  const progress=document.getElementById("goalsProgress").value;
-  const lines=text.split("\n").map(x=>x.trim()).filter(Boolean);
-  const prog=progress.split("\n").map(x=>x.trim());
-  meta.goals=lines.map((line,i)=>({
-    text:line,
-    progress:prog[i]||"",
-    done:false
-  }));
-  save();
-  showSettings();
-}
-
-function markGoalDone(i){
-  meta.goals[i].done=!meta.goals[i].done;
-  save();
-  showSettings();
-}
-
-function showSettings(){
-  const d=data();
-  let h=`<div class="card"><h3>Habits</h3>`;
-  d.habits.forEach((x,i)=>{
-    h+=`<div class="row-actions">
-    <div>${esc(x.name)}</div>
-    <button class="btn secondary" onclick="toggleHabitType(${i})">${x.type==="work"?"Move to Personal":"Move to Work"}</button>
-    <button class="btn archive" onclick="archiveHabit(${i})">Archive</button>
-    </div>`;
-  });
-  h+=`<h3>Add Habit</h3>
-  <input id="newHabit" type="text" placeholder="New habit">
-  <select id="habitType">
-    <option value="personal">Personal</option>
-    <option value="work">Work</option>
-  </select>
-  <button class="btn" onclick="addHabit()">Add Habit</button>
-
-  <h3>Goals</h3>
-  <div class="muted">One goal per line. Add optional tracking notes in the second box.</div>
-  <textarea id="goalsText" placeholder="Read 20 books&#10;Build 2 apps&#10;Run half marathon">${meta.goals.map(g=>g.text).join("\n")}</textarea>
-  <textarea id="goalsProgress" placeholder="6 / 20&#10;1 / 2&#10;Training weekly">${meta.goals.map(g=>g.progress||"").join("\n")}</textarea>
-  <button class="btn" onclick="saveGoals()">Save Goals</button>
-  ${meta.goals.length?meta.goals.map((g,i)=>`<div class="goal-row"><div>${esc(g.text)}</div><button class="btn secondary" onclick="markGoalDone(${i})">${g.done?"Mark Active":"Mark Done"}</button></div>`).join(""):""}
-
-  <h3>Baseline Weight</h3>
-  <input type="number" step="0.1" value="${meta.baselineWeight||""}" onchange="setBaselineWeight(this.value)" placeholder="e.g. 80.0">
-
-  <h3>Backup</h3>
-  <button class="btn secondary" onclick="exportData()">Export Backup</button>
-  <input type="file" onchange="importData(event)">
-
-  <div class="muted">Version 3.4</div>
-  </div>`;
-  document.getElementById("content").innerHTML=h;
-}
-
-function changeMonth(key){
-  selected=key;
-  ensure(key);
-  save();
-  showProgress();
-}
-
-save();
-showToday();
+function getDateForDay(key,day){const d=monthDate(key);d.setDate(day);return d}
+function getSafeDefaultDay(key){return key===CURRENT_MONTH_KEY?Math.min(DEFAULT_LOG_DATE.getDate(),daysInMonth(key)):1}
+function ensureMonth(key){if(store[key]){if(!store[key].habits) store[key].habits=clone(DEFAULT_HABITS);if(!store[key].days) store[key].days={};if(!store[key].weight) store[key].weight={};if(!store[key].moments) store[key].moments={};store[key].habits.forEach(h=>{if(!h.type) h.type="personal";if(h.archived===undefined) h.archived=false;});return;}const prevKey=previousMonthKey(key);const habits=clone(store[prevKey]?.habits||DEFAULT_HABITS);habits.forEach(h=>{if(!h.type) h.type="personal";if(h.archived===undefined) h.archived=false;});store[key]={habits,days:{},weight:{},moments:{}}}
+ensureMonth(CURRENT_MONTH_KEY);
+function saveState(){localStorage.setItem("habitV251",JSON.stringify(store));localStorage.setItem("habitMetaV35",JSON.stringify(meta))}
+function monthData(key=selectedMonthKey){ensureMonth(key);return store[key]}
+function setActiveTab(tabName){currentTab=tabName;document.querySelectorAll(".tab").forEach(tab=>tab.classList.toggle("active",tab.dataset.tab===tabName))}
+function showToast(message,undoFn){toastState={message,undoFn};const old=document.getElementById("toast");if(old) old.remove();const div=document.createElement("div");div.id="toast";div.className="toast";div.innerHTML=`<span>${escapeHtml(message)}</span><button type="button" onclick="undoToast()">Undo</button>`;document.body.appendChild(div);setTimeout(()=>{const live=document.getElementById("toast");if(live&&toastState&&toastState.message===message){toastState=null;live.remove();}},4000)}
+function clearToast(){toastState=null;const old=document.getElementById("toast");if(old) old.remove()}
+function undoToast(){if(!toastState) return;const fn=toastState.undoFn;clearToast();if(fn) fn()}
+function activeForDate(h,dateObj){const weekend=(dateObj.getDay()===0||dateObj.getDay()===6);if(h.type==="work"&&weekend) return false;return true}
+function currentViewedDate(){return getDateForDay(selectedMonthKey,selectedDay)}
+function toggleHabit(name,day){const month=monthData();month.days[day]=month.days[day]||[];const before=clone(month.days[day]);month.days[day]=month.days[day].includes(name)?month.days[day].filter(x=>x!==name):[...month.days[day],name];saveState();showToday();showToast("Habit updated",()=>{month.days[day]=before;saveState();showToday();})}
+function setWeight(v,day){const month=monthData();month.weight[day]=v;saveState()}
+function setMoment(v,day){const month=monthData();month.moments[day]=v;saveState()}
+function monthSelector(){const keys=monthKeys();return `<div class="card month-picker"><label><strong>Month</strong></label><select onchange="changeMonth(this.value)">${keys.map(key=>`<option value="${key}" ${key===selectedMonthKey?'selected':''}>${formatMonth(key)}</option>`).join("")}</select></div>`}
+function daySelectorCard(){const maxDay=selectedMonthKey===CURRENT_MONTH_KEY?Math.min(DEFAULT_LOG_DATE.getDate(),daysInMonth(selectedMonthKey)):daysInMonth(selectedMonthKey);const options=Array.from({length:maxDay},(_,i)=>i+1).reverse().map(day=>`<option value="${day}" ${day===selectedDay?'selected':''}>${formatDate(getDateForDay(selectedMonthKey,day))}</option>`).join("");return `<div class="card"><label><strong>Day</strong></label><select onchange="changeDay(this.value)">${options}</select><div class="muted">You can edit previous days here.</div></div>`}
+function maxLoggedDay(key){return key===CURRENT_MONTH_KEY?Math.min(DEFAULT_LOG_DATE.getDate(),daysInMonth(key)):daysInMonth(key)}
+function score(key=selectedMonthKey){const month=monthData(key);let total=0,done=0;for(let day=1;day<=maxLoggedDay(key);day++){const dateObj=getDateForDay(key,day);month.habits.filter(h=>!h.archived&&activeForDate(h,dateObj)).forEach(h=>{total++;if(month.days[day]?.includes(h.name)) done++;});}return total?Math.round(done/total*100):0}
+function dayComplete(key,day){const month=monthData(key);const dateObj=getDateForDay(key,day);const habits=month.habits.filter(h=>!h.archived&&activeForDate(h,dateObj));return habits.length>0&&habits.every(h=>month.days[day]?.includes(h.name))}
+function previousDayReference(key,day){if(day>1) return {key,day:day-1};const prevKey=previousMonthKey(key);if(!store[prevKey]) return null;return {key:prevKey,day:maxLoggedDay(prevKey)}}
+function currentStreak(key=selectedMonthKey){let ref={key,day:maxLoggedDay(key)},streak=0;while(ref&&ref.day>=1){if(dayComplete(ref.key,ref.day)){streak++;ref=previousDayReference(ref.key,ref.day);}else break;}return streak}
+function bestStreak(){const keys=monthKeys().sort();let best=0,current=0;keys.forEach(key=>{for(let day=1;day<=maxLoggedDay(key);day++){if(dayComplete(key,day)){current++;if(current>best) best=current;}else current=0;}});return best}
+function summaryCards(){return `<div class="score-grid"><div class="metric">${score()}%<small>Month Score</small></div><div class="metric">${currentStreak()}<small>Current Streak</small></div><div class="metric">${bestStreak()}<small>Best Streak</small></div></div>`}
+function fullDayCompleteCard(){return dayComplete(selectedMonthKey,selectedDay)?`<div class="card done-day"><strong>Nice work — full day complete.</strong><div class="muted">All active habits are done for ${formatDate(currentViewedDate())}.</div></div>`:""}
+function showToday(){setActiveTab("today");clearToast();const month=monthData(),day=selectedDay,dayDate=currentViewedDate();let html=monthSelector()+daySelectorCard()+`<div class="card"><strong>${selectedMonthKey===CURRENT_MONTH_KEY&&selectedDay===DEFAULT_LOG_DATE.getDate()?"Yesterday":"Viewing"}</strong><br>${formatDate(dayDate)}</div>`+fullDayCompleteCard();const personal=month.habits.filter(h=>!h.archived&&h.type!=="work"&&activeForDate(h,dayDate));const work=month.habits.filter(h=>!h.archived&&h.type==="work"&&activeForDate(h,dayDate));if(personal.length){html+=`<div class="section-title">PERSONAL</div>`;personal.forEach(h=>{const done=month.days[day]?.includes(h.name);html+=`<div class="habit" onclick='toggleHabit(${JSON.stringify(h.name)},${day})'><div class="dot ${done?"done":""}"></div><div>${escapeHtml(h.name)}</div></div>`;});}if(work.length){html+=`<div class="section-title">WORK</div>`;work.forEach(h=>{const done=month.days[day]?.includes(h.name);html+=`<div class="habit" onclick='toggleHabit(${JSON.stringify(h.name)},${day})'><div class="dot ${done?"done":""}"></div><div>${escapeHtml(h.name)}</div></div>`;});}html+=`<div class="card"><h3>Weight</h3><input type="number" step="0.1" value="${month.weight[day]||""}" onchange="setWeight(this.value,${day})"><div class="unit-label">Unit: ${escapeHtml(meta.weightUnit)}</div><h3>Memorable Moment</h3><textarea onchange="setMoment(this.value,${day})">${month.moments[day]||""}</textarea></div>`;document.getElementById("content").innerHTML=html}
+function weightSummary(){const month=monthData();const entries=Object.keys(month.weight).sort((a,b)=>Number(a)-Number(b)).filter(key=>String(month.weight[key]).trim()!=="");const current=entries.length?Number(month.weight[entries[entries.length-1]]):null;const baseline=meta.baselineWeight!==""?Number(meta.baselineWeight):null;let change=null;if(current!==null&&baseline!==null&&!Number.isNaN(current)&&!Number.isNaN(baseline)) change=(current-baseline).toFixed(1);return {entries,current,baseline,change}}
+function weightCards(){const {current,baseline,change}=weightSummary();return `<div class="card"><h3>Weight</h3><div class="weight-grid"><div class="metric">${current!==null&&!Number.isNaN(current)?current.toFixed(1):"—"}<small>Current (${escapeHtml(meta.weightUnit)})</small></div><div class="metric">${baseline!==null&&!Number.isNaN(baseline)?baseline.toFixed(1):"—"}<small>Baseline</small></div><div class="metric">${change!==null?(change>0?"+":"")+change:"—"}<small>Change</small></div></div></div>`}
+function weightChart(){const month=monthData();const entries=Object.keys(month.weight).sort((a,b)=>Number(a)-Number(b)).filter(key=>String(month.weight[key]).trim()!=="");if(entries.length<2) return `<div class="card"><h3>Weight Trend</h3><div class="muted">Add at least 2 weight entries to see a trend.</div></div>`;const values=entries.map(key=>Number(month.weight[key])).filter(v=>!Number.isNaN(v));if(values.length<2) return `<div class="card"><h3>Weight Trend</h3><div class="muted">Not enough valid weight entries yet.</div></div>`;const min=Math.min(...values),max=Math.max(...values),range=max-min||1,width=320,height=180,pad=18;const points=values.map((v,i)=>`${pad+(i*(width-pad*2))/Math.max(values.length-1,1)},${height-pad-((v-min)/range)*(height-pad*2)}`).join(" ");const circles=values.map((v,i)=>`<circle cx="${pad+(i*(width-pad*2))/Math.max(values.length-1,1)}" cy="${height-pad-((v-min)/range)*(height-pad*2)}" r="3"></circle>`).join("");return `<div class="card"><h3>Weight Trend</h3><svg class="chart" viewBox="0 0 ${width} ${height}"><line x1="${pad}" y1="${height-pad}" x2="${width-pad}" y2="${height-pad}" stroke="#ddd" stroke-width="1"></line><polyline fill="none" stroke="#007AFF" stroke-width="3" points="${points}"></polyline><g fill="#007AFF">${circles}</g></svg><div class="muted">Latest ${values.length} entries this month.</div></div>`}
+function goalCard(){if(!meta.goals.length) return `<div class="card"><h3>Goals</h3><div class="muted">No goals added yet.</div></div>`;return `<div class="card"><h3>Goals</h3>${meta.goals.map(g=>`<div class="goal-row"><div>${escapeHtml(g.text)}<div class="goal-chip">${g.progress||""}</div></div><div>${g.done?"✅":"•"}</div></div>`).join("")}</div>`}
+function monthGrid(){const month=monthData();let html=`<div class="card"><h3>Month View</h3><div class="muted">Scroll sideways to see the whole month.</div></div><div class="grid-wrap"><table><tr><th class="habit-name"></th>`;for(let day=1;day<=daysInMonth(selectedMonthKey);day++) html+=`<th>${day}</th>`;html+=`</tr>`;month.habits.filter(h=>!h.archived).forEach((habit,index)=>{html+=`<tr class="${index%2===1?'alt-row':''}"><th class="habit-name">${escapeHtml(habit.name)}</th>`;for(let day=1;day<=daysInMonth(selectedMonthKey);day++){const done=month.days[day]?.includes(habit.name);html+=`<td class="cell ${done?'done-cell':'empty-cell'} ${selectedMonthKey===CURRENT_MONTH_KEY&&day===DEFAULT_LOG_DATE.getDate()?'today-cell':''}">${done?'•':''}</td>`;}html+=`</tr>`;});return html+`</table></div>`}
+function showProgress(){setActiveTab("progress");clearToast();document.getElementById("content").innerHTML=monthSelector()+summaryCards()+goalCard()+weightCards()+weightChart()+monthGrid()}
+function showLife(){setActiveTab("life");clearToast();const month=monthData();let html=monthSelector()+`<div class="card"><h3>Memorable Moments</h3>`,has=false;Object.keys(month.moments).sort((a,b)=>Number(b)-Number(a)).forEach(day=>{if(!String(month.moments[day]).trim()) return;has=true;html+=`<div class="list-line" onclick="editLifeMoment(${day})" style="cursor:pointer;"><strong>${formatDate(getDateForDay(selectedMonthKey,Number(day)))}</strong><br>${escapeHtml(month.moments[day])}<div class="muted">Tap to edit</div></div>`;});if(!has) html+=`<div class="muted">No memorable moments yet.</div>`;document.getElementById("content").innerHTML=html+`</div>`}
+function editLifeMoment(day){selectedDay=Number(day);showToday()}
+function toggleHabitType(index){const month=monthData();month.habits[index].type=month.habits[index].type==="work"?"personal":"work";saveState();showSettings()}
+function archiveHabit(index){const month=monthData();month.habits[index].archived=true;saveState();showSettings()}
+function restoreHabit(index){const month=monthData();month.habits[index].archived=false;saveState();showSettings()}
+function moveHabit(index,direction){const month=monthData();const newIndex=index+direction;if(newIndex<0||newIndex>=month.habits.length) return;const temp=month.habits[index];month.habits[index]=month.habits[newIndex];month.habits[newIndex]=temp;saveState();showSettings()}
+function addHabit(){const name=document.getElementById("newHabit").value.trim();const type=document.getElementById("habitType").value;const month=monthData();if(!name){alert("Please enter a habit name.");return;}if(name.length>40){alert("Habit names must be 40 characters or fewer.");return;}if(month.habits.some(h=>h.name.toLowerCase()===name.toLowerCase())){alert("That habit name already exists.");return;}month.habits.push({name,archived:false,type});saveState();showSettings()}
+function exportData(){const payload={store,meta};const uri="data:text/json;charset=utf-8,"+encodeURIComponent(JSON.stringify(payload));const a=document.createElement("a");a.href=uri;a.download="habit-backup.json";a.click()}
+function importData(event){const file=event.target.files[0];event.target.value="";if(!file) return;if(!confirm("Import backup? This will overwrite your current data.")) return;const reader=new FileReader();reader.onload=function(){try{const parsed=JSON.parse(reader.result);if(parsed.store){store=parsed.store;meta=parsed.meta||meta;}else{store=parsed;}Object.keys(store).forEach(key=>ensureMonth(key));ensureMonth(CURRENT_MONTH_KEY);if(!meta||typeof meta!=="object") meta={baselineWeight:"",goals:[],weightUnit:"kg"};if(!Array.isArray(meta.goals)) meta.goals=[];if(!meta.weightUnit) meta.weightUnit="kg";selectedMonthKey=CURRENT_MONTH_KEY;selectedDay=getSafeDefaultDay(selectedMonthKey);saveState();alert("Backup imported successfully");showToday();}catch(e){alert("Import failed. Please choose a valid backup file.");}};reader.readAsText(file)}
+function setBaselineWeight(value){meta.baselineWeight=value;saveState()}
+function setWeightUnit(value){meta.weightUnit=value;saveState()}
+function saveGoals(){const lines=document.getElementById("goalsText").value.split("\\n").map(x=>x.trim()).filter(Boolean);const progressLines=document.getElementById("goalsProgress").value.split("\\n").map(x=>x.trim());meta.goals=lines.map((line,index)=>({text:line,progress:progressLines[index]||"",done:meta.goals[index]?.done||false}));saveState();showSettings()}
+function markGoalDone(index){meta.goals[index].done=!meta.goals[index].done;saveState();showSettings()}
+async function checkStorageUsage(){if(!navigator.storage||!navigator.storage.estimate){alert("Storage estimate is not available on this browser.");return;}const est=await navigator.storage.estimate();const usage=est.usage||0,quota=est.quota||0,percent=quota?Math.round((usage/quota)*100):0;alert(`Using ${percent}% of available storage.${percent>=80?" Warning: you are getting close to the limit.":""}`)}
+function showSettings(){setActiveTab("settings");clearToast();const month=monthData();let html=`<div class="card"><h3>Habits</h3>`;month.habits.forEach((habit,index)=>{if(habit.archived) return;html+=`<div class="row-actions"><div>${escapeHtml(habit.name)}</div><button class="small-btn" onclick="moveHabit(${index},-1)">↑</button><button class="small-btn" onclick="moveHabit(${index},1)">↓</button><button class="small-btn" onclick="toggleHabitType(${index})">${habit.type==="work"?"To Personal":"To Work"}</button><button class="small-btn small-danger" onclick="archiveHabit(${index})">Archive</button></div>`;});const archived=month.habits.map((habit,index)=>({habit,index})).filter(item=>item.habit.archived);if(archived.length){html+=`<h3>Archived Habits</h3>`;archived.forEach(({habit,index})=>{html+=`<div class="row-actions"><div>${escapeHtml(habit.name)}</div><span></span><span></span><span></span><button class="small-btn small-green" onclick="restoreHabit(${index})">Restore</button></div>`;});}html+=`<h3>Add Habit</h3><input id="newHabit" type="text" maxlength="40" placeholder="New habit"><select id="habitType"><option value="personal">Personal</option><option value="work">Work</option></select><button class="btn" onclick="addHabit()">Add Habit</button><h3>Goals</h3><div class="muted">One goal per line. Add optional tracking notes in the second box.</div><textarea id="goalsText" placeholder="Read 20 books&#10;Build 2 apps&#10;Run half marathon">${meta.goals.map(g=>g.text).join("\\n")}</textarea><textarea id="goalsProgress" placeholder="6 / 20&#10;1 / 2&#10;Training weekly">${meta.goals.map(g=>g.progress||"").join("\\n")}</textarea><button class="btn" onclick="saveGoals()">Save Goals</button>${meta.goals.length?meta.goals.map((g,index)=>`<div class="goal-row"><div>${escapeHtml(g.text)}</div><button class="btn secondary" onclick="markGoalDone(${index})">${g.done?"Mark Active":"Mark Done"}</button></div>`).join(""):""}<h3>Weight Settings</h3><div class="inline-row"><div><label><strong>Baseline</strong></label><input type="number" step="0.1" value="${meta.baselineWeight||""}" onchange="setBaselineWeight(this.value)" placeholder="e.g. 80.0"></div><div><label><strong>Unit</strong></label><select onchange="setWeightUnit(this.value)"><option value="kg" ${meta.weightUnit==="kg"?"selected":""}>kg</option><option value="lbs" ${meta.weightUnit==="lbs"?"selected":""}>lbs</option></select></div></div><h3>Backup</h3><button class="btn secondary" onclick="exportData()">Export Backup</button><input type="file" onchange="importData(event)"><button class="btn secondary" onclick="checkStorageUsage()">Check Local Storage Usage</button><div class="muted">Version 3.5</div></div>`;document.getElementById("content").innerHTML=html}
+function changeMonth(key){selectedMonthKey=key;ensureMonth(key);selectedDay=getSafeDefaultDay(key);if(currentTab==="today") showToday();else if(currentTab==="life") showLife();else if(currentTab==="settings") showSettings();else showProgress()}
+function changeDay(value){selectedDay=Number(value);showToday()}
+saveState();showToday();
