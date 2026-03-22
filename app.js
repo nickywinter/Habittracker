@@ -1,6 +1,6 @@
 // ─── Version & Constants ──────────────────────────────────────────────────────
 
-const APP_VERSION = "4.3";
+const APP_VERSION = "4.3.1";
 const STORE_KEY        = "daymarkV4";
 const META_KEY         = "daymarkMetaV4";
 const AUTO_BACKUP_KEY  = "daymarkAutoBackup"; // stores timestamp of last auto-backup
@@ -627,9 +627,15 @@ function importJSON(file) {
     try {
       const parsed = JSON.parse(reader.result);
       if (parsed.version && parsed.store && parsed.meta) {
-        // v4 native format — use directly
+        // v4 native format — use directly, then migrate store if needed
         store = parsed.store;
         meta  = parsed.meta;
+        // Ensure trackers field exists in meta (v4.0-4.2 backups won't have it)
+        if (!meta.trackers) {
+          meta.trackers = [{ id: "t0", name: "Weight", unit: meta.weightUnit||"kg", baseline: meta.baselineWeight||"" }];
+        }
+        // Migrate old weight keys to trackers format
+        migrateStoreToTrackers();
       } else if (parsed.store) {
         // v3 format — migrate meta AND remap store days from names to IDs
         // migrateMeta writes remapped days into store as a side effect

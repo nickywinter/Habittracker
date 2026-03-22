@@ -477,6 +477,9 @@ function statsNextYear() { if(state.statsYear<DEFAULT_LOG_DATE.getFullYear()) { 
 function renderSettings() {
   document.getElementById("content").innerHTML =
     renderHabitsSection() + renderCategoriesSection() + renderGoalsSection() + renderTrackersSection() + renderBackupSection();
+  // Attach add-tracker button via addEventListener (more reliable on iOS PWA than onclick)
+  const addBtn = document.getElementById("add-tracker-btn");
+  if (addBtn) addBtn.addEventListener("click", submitAddTracker);
 }
 
 function renderHabitsSection() {
@@ -594,18 +597,10 @@ function renderTrackersSection() {
 
   if (trackers.length < 3) {
     html += `<h3>Add Tracker</h3>
-      <input id="new-tracker-name" type="text" maxlength="30" placeholder="e.g. Weight, Sleep hours, Mood">
-      <div class="inline-row" style="margin-top:0">
-        <div>
-          <label>Unit</label>
-          <input id="new-tracker-unit" type="text" maxlength="10" placeholder="kg, hrs, /10">
-        </div>
-        <div>
-          <label>Baseline (optional)</label>
-          <input id="new-tracker-baseline" type="number" step="0.1" placeholder="e.g. 80.0">
-        </div>
-      </div>
-      <button class="btn" onclick="submitAddTracker()">Add Tracker</button>`;
+      <input id="new-tracker-name" type="text" maxlength="30" placeholder="Name e.g. Weight, Sleep, Mood">
+      <input id="new-tracker-unit" type="text" maxlength="10" placeholder="Unit e.g. kg, hrs, /10" style="margin-top:8px">
+      <input id="new-tracker-baseline" type="number" step="0.1" placeholder="Baseline (optional)" style="margin-top:8px">
+      <button class="btn" id="add-tracker-btn" style="margin-top:10px">Add Tracker</button>`;
   } else {
     html += `<div class="muted" style="margin-top:8px">Maximum 3 trackers reached.</div>`;
   }
