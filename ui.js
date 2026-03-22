@@ -59,15 +59,18 @@ function renderLog() {
     catMap[h.categoryId].push(h);
   });
 
+  const logStyle = meta.loggingStyle || "reflect";
+  const isDefaultDay = key===CURRENT_MONTH_KEY && day===maxLoggedDay(key);
+  const styleLabel = isDefaultDay ? (logStyle === "live" ? "Today · " : "Yesterday · ") : "";
   let html = `
     <div class="card day-nav-card">
       <div class="day-nav">
         <button class="nav-btn" onclick="logPrevDay()">‹</button>
         <div class="day-nav-info">
           <div class="day-nav-date">${formatDate(dateObj)}</div>
-          <div class="day-nav-sub">${done} of ${total} done</div>
+          <div class="day-nav-sub">${styleLabel}${done} of ${total} done</div>
         </div>
-        <button class="nav-btn" onclick="logNextDay()" ${key===CURRENT_MONTH_KEY&&day===maxLoggedDay(key)?'disabled':''}>›</button>
+        <button class="nav-btn" onclick="logNextDay()" ${isDefaultDay?'disabled':''}>›</button>
       </div>
       <div class="progress-bar-wrap"><div class="progress-bar" style="width:${total?Math.round(done/total*100):0}%"></div></div>
     </div>`;
@@ -699,8 +702,26 @@ function setSettingsView(view) {
 
 // Weight section kept for Data tab — just baseline and unit settings
 function renderWeightSection() {
+  const style = meta.loggingStyle || "reflect";
   const trackers = getTrackers();
-  if (!trackers.length) return "";
+  let settingsHtml = `<div class="card">
+    <h3>Logging style</h3>
+    <div class="muted" style="margin-bottom:10px">How you prefer to track your day.</div>
+    <div class="ob-choice-cards">
+      <div class="ob-choice-card ${style==="reflect"?"ob-choice-selected":""}" onclick="setLoggingStyle('reflect');renderSettings()">
+        <div class="ob-choice-icon" style="font-size:20px">🌅</div>
+        <div class="ob-choice-title">Morning reflection ${style==="reflect"?"✓":""}</div>
+        <div class="ob-choice-desc">Log yesterday each morning.</div>
+      </div>
+      <div class="ob-choice-card ${style==="live"?"ob-choice-selected":""}" onclick="setLoggingStyle('live');renderSettings()">
+        <div class="ob-choice-icon" style="font-size:20px">⚡</div>
+        <div class="ob-choice-title">Daily tracking ${style==="live"?"✓":""}</div>
+        <div class="ob-choice-desc">Log today as it happens.</div>
+      </div>
+    </div>
+  </div>`;
+
+  if (!trackers.length) return settingsHtml;
   // Show baseline/unit settings for each tracker inline
   let html = `<div class="card"><h3>Tracker Settings</h3>`;
   trackers.forEach(t => {
@@ -721,7 +742,7 @@ function renderWeightSection() {
     </div>`;
   });
   html += `</div>`;
-  return html;
+  return settingsHtml + html;
 }
 
 function renderHabitsSection() {
@@ -1166,10 +1187,31 @@ function renderOnboarding(step) {
         <div class="ob-privacy">
           🔒 Everything stays on your device. No account, no cloud, no ads — ever.
         </div>
-        <button class="btn" onclick="renderOnboarding(3)" style="margin-top:16px">Get started →</button>
+        <button class="btn" onclick="renderOnboarding(3)" style="margin-top:16px">Choose your style →</button>
       </div>`;
 
   } else if (step === 3) {
+    // Logging style
+    html = `
+      <div class="onboarding">
+        <div class="ob-logo">◆</div>
+        <h2>How do you like to reflect?</h2>
+        <p class="ob-tagline">Pick what feels natural — you can change this any time in Settings.</p>
+        <div class="ob-choice-cards">
+          <div class="ob-choice-card" onclick="selectLoggingStyle('reflect')">
+            <div class="ob-choice-icon" style="font-size:28px">🌅</div>
+            <div class="ob-choice-title">Morning reflection</div>
+            <div class="ob-choice-desc">Log yesterday's habits each morning. Review your day with fresh eyes and a clear head.</div>
+          </div>
+          <div class="ob-choice-card" onclick="selectLoggingStyle('live')">
+            <div class="ob-choice-icon" style="font-size:28px">⚡</div>
+            <div class="ob-choice-title">Daily tracking</div>
+            <div class="ob-choice-desc">Log today as it happens. Tick off habits through the day and write your moment in the evening.</div>
+          </div>
+        </div>
+      </div>`;
+
+  } else if (step === 4) {
     // Choose starting point
     html = `
       <div class="onboarding">
@@ -1198,6 +1240,12 @@ function renderOnboarding(step) {
   }
 
   document.getElementById("content").innerHTML = html;
+}
+
+function selectLoggingStyle(style) {
+  meta.loggingStyle = style;
+  refreshLogDate();
+  renderOnboarding(4);
 }
 
 function triggerImport() {
@@ -1260,6 +1308,7 @@ function dismissFirstTip() {
 function init() {
   const firstRun = isFirstRun();
   loadAll();
+  refreshLogDate(); // apply loggingStyle preference to DEFAULT_LOG_DATE
   if (firstRun) {
     renderOnboarding(1);
   } else {

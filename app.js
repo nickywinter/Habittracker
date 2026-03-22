@@ -1,6 +1,6 @@
 // ─── Version & Constants ──────────────────────────────────────────────────────
 
-const APP_VERSION = "4.5";
+const APP_VERSION = "4.6";
 const STORE_KEY        = "daymarkV4";
 const META_KEY         = "daymarkMetaV4";
 const AUTO_BACKUP_KEY  = "daymarkAutoBackup"; // stores timestamp of last auto-backup
@@ -9,9 +9,17 @@ const MONTHS      = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct"
 const FULL_MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
 const CATEGORY_COLORS = ["#007AFF","#34C759","#FF9500","#FF3B30","#AF52DE","#FF2D55","#5AC8FA","#FFCC00","#FF6B35","#30B0C7"];
 
-// Log date = yesterday (intentional — you log the day just completed)
-const DEFAULT_LOG_DATE  = new Date(Date.now() - 86400000);
-const CURRENT_MONTH_KEY = monthKey(DEFAULT_LOG_DATE);
+// Log date is either today (live mode) or yesterday (reflect mode).
+// Determined by meta.loggingStyle — set during onboarding, changeable in Settings.
+// Call refreshLogDate() whenever loggingStyle changes.
+let DEFAULT_LOG_DATE  = new Date(Date.now() - 86400000); // default: reflect (yesterday)
+let CURRENT_MONTH_KEY = monthKey(DEFAULT_LOG_DATE);
+
+function refreshLogDate() {
+  const style = meta?.loggingStyle || "reflect";
+  DEFAULT_LOG_DATE  = style === "live" ? new Date() : new Date(Date.now() - 86400000);
+  CURRENT_MONTH_KEY = monthKey(DEFAULT_LOG_DATE);
+}
 
 const DEFAULT_CATEGORIES = [
   { id: "personal", name: "Personal", color: "#007AFF" },
@@ -105,7 +113,8 @@ function freshMeta() {
     goals:         [],
     trackers: [{ id: "t0", name: "Weight", unit: "kg", baseline: "" }],
     weeklyReviews: {},
-    books: []
+    books: [],
+    loggingStyle: "reflect" // "reflect" (yesterday) | "live" (today)
   };
 }
 
@@ -170,7 +179,8 @@ function migrateMeta(raw, sourceStore) {
       goals:         (oldMeta.goals||[]).map(g => ({ id: uid(), text: g.text||"", progress: g.progress||"", done: g.done||false, dueDate: "" })),
       trackers: [{ id: "t0", name: "Weight", unit: oldMeta.weightUnit||"kg", baseline: oldMeta.baselineWeight||"" }],
       weeklyReviews: {},
-      books: []
+      books: [],
+      loggingStyle: "reflect"
     };
   }
   // Already v4 format — just ensure all fields exist
@@ -181,7 +191,8 @@ function migrateMeta(raw, sourceStore) {
     goals:         raw.goals         || [],
     trackers: raw.trackers || [{ id: "t0", name: "Weight", unit: raw.weightUnit||"kg", baseline: raw.baselineWeight||"" }],
     weeklyReviews: raw.weeklyReviews || {},
-    books: raw.books || []
+    books: raw.books || [],
+    loggingStyle: raw.loggingStyle || "reflect"
   };
 }
 
@@ -562,6 +573,17 @@ function exportJSON() {
   resetAutoBackupTimer();
 }
 
+// ─── Logging Style ───────────────────────────────────────────────────────────
+
+function setLoggingStyle(style) {
+  meta.loggingStyle = style;
+  refreshLogDate();
+  // Reset log navigation to new default day
+  state.logMonthKey = CURRENT_MONTH_KEY;
+  state.logDay      = getSafeDefaultDay(CURRENT_MONTH_KEY);
+  saveAll();
+}
+
 // ─── Books ───────────────────────────────────────────────────────────────────
 
 function getBooks() { return meta.books || []; }
@@ -695,6 +717,8 @@ function importJSON(file) {
         if (!meta.books) meta.books = [];
         // Ensure weeklyReviews exists
         if (!meta.weeklyReviews) meta.weeklyReviews = {};
+        // Ensure loggingStyle exists (v4.0-4.5 backups won't have it)
+        if (!meta.loggingStyle) meta.loggingStyle = "reflect";
         // Migrate old weight keys to trackers format
         migrateStoreToTrackers();
       } else if (parsed.store) {
