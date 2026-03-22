@@ -1026,6 +1026,7 @@ function init() {
   if (firstRun) {
     renderOnboarding(1);
   } else {
+    migrateStoreToTrackers(); // migrate weight -> trackers for v4.0-4.2 users
     saveAll(); // persist any migrations
     showTab("log");
     // Check if a weekly auto-backup is due

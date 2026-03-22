@@ -191,6 +191,27 @@ function saveAll() {
   }
 }
 
+// Migrate existing v4.0–4.2 store months that still have old `weight` key
+// instead of the new `trackers` format. Runs once on load.
+function migrateStoreToTrackers() {
+  let changed = false;
+  Object.keys(store).forEach(mk => {
+    const ms = store[mk];
+    if (ms.weight && Object.keys(ms.weight).length > 0) {
+      // Move weight data into trackers["t0"]
+      if (!ms.trackers) ms.trackers = {};
+      if (!ms.trackers["t0"]) {
+        ms.trackers["t0"] = ms.weight;
+        changed = true;
+      }
+      // Remove old weight key
+      delete ms.weight;
+      changed = true;
+    }
+  });
+  if (changed) saveAll();
+}
+
 // ─── Month Data ───────────────────────────────────────────────────────────────
 
 function monthExists(key)  { return !!store[key]; }
