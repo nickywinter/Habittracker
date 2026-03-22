@@ -1,533 +1,607 @@
+// ─── Version & Constants ──────────────────────────────────────────────────────
 
-// ─── Constants ────────────────────────────────────────────────────────────────
+const APP_VERSION = "4.0";
+const STORE_KEY   = "daymarkV4";
+const META_KEY    = "daymarkMetaV4";
+const MONTHS      = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+const FULL_MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+const CATEGORY_COLORS = ["#007AFF","#34C759","#FF9500","#FF3B30","#AF52DE","#FF2D55","#5AC8FA","#FFCC00","#FF6B35","#30B0C7"];
 
-const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
-const DEFAULT_HABITS = [
-  {name:"Exercise",archived:false,type:"personal"},
-  {name:"Walk",archived:false,type:"personal"},
-  {name:"Read",archived:false,type:"personal"},
-  {name:"Podcast",archived:false,type:"personal"},
-  {name:"Sleep 7+",archived:false,type:"personal"},
-  {name:"Cold Shower",archived:false,type:"personal"},
-  {name:"No Alcohol",archived:false,type:"personal"},
-  {name:"Plan Day",archived:false,type:"work"}
-];
-
-// Default log date is yesterday — intentional, so you log the day just completed
-const DEFAULT_LOG_DATE = new Date(Date.now() - 86400000);
+// Log date = yesterday (intentional — you log the day just completed)
+const DEFAULT_LOG_DATE  = new Date(Date.now() - 86400000);
 const CURRENT_MONTH_KEY = monthKey(DEFAULT_LOG_DATE);
 
-// ─── State ────────────────────────────────────────────────────────────────────
+const DEFAULT_CATEGORIES = [
+  { id: "personal", name: "Personal", color: "#007AFF" },
+  { id: "work",     name: "Work",     color: "#FF9500" }
+];
 
-let selectedMonthKey = CURRENT_MONTH_KEY;
-let selectedDay = getSafeDefaultDay(selectedMonthKey);
-let currentTab = "today";
-let toastState = null;
-
-// Progress tab has its own independent month selection so it does not
-// interfere with the Log tab's month browsing.
-let progressMonthKey = CURRENT_MONTH_KEY;
-
-let store = loadStore();
-let meta = loadMeta();
-
-function loadStore() {
-  try { return JSON.parse(localStorage.getItem("habitV251")) || {}; }
-  catch (e) { return {}; }
-}
-
-function loadMeta() {
-  try {
-    const raw =
-      JSON.parse(localStorage.getItem("habitMetaV35")) ||
-      JSON.parse(localStorage.getItem("habitMetaV34")) ||
-      JSON.parse(localStorage.getItem("habitMetaV33")) || {};
-    return {
-      baselineWeight: raw.baselineWeight || "",
-      goals: Array.isArray(raw.goals) ? raw.goals : [],
-      weightUnit: raw.weightUnit || "kg"
-    };
-  } catch (e) { return {baselineWeight: "", goals: [], weightUnit: "kg"}; }
-}
+const DEFAULT_HABITS = [
+  { id: "h1", name: "Exercise",     categoryId: "personal", frequency: { type: "daily" },    archived: false },
+  { id: "h2", name: "Walk",         categoryId: "personal", frequency: { type: "daily" },    archived: false },
+  { id: "h3", name: "Read",         categoryId: "personal", frequency: { type: "daily" },    archived: false },
+  { id: "h4", name: "Podcast",      categoryId: "personal", frequency: { type: "daily" },    archived: false },
+  { id: "h5", name: "Sleep 7+",     categoryId: "personal", frequency: { type: "daily" },    archived: false },
+  { id: "h6", name: "Cold Shower",  categoryId: "personal", frequency: { type: "daily" },    archived: false },
+  { id: "h7", name: "No Alcohol",   categoryId: "personal", frequency: { type: "daily" },    archived: false },
+  { id: "h8", name: "Plan Day",     categoryId: "work",     frequency: { type: "weekdays" }, archived: false }
+];
 
 // ─── Date Helpers ─────────────────────────────────────────────────────────────
 
-function monthKey(d) { return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0"); }
-function monthDate(key) { const [y,m] = key.split("-").map(Number); return new Date(y, m-1, 1); }
-function daysInMonth(key) { const d = monthDate(key); return new Date(d.getFullYear(), d.getMonth()+1, 0).getDate(); }
-function formatDate(d) { return d.getDate() + " " + MONTHS[d.getMonth()] + " " + d.getFullYear(); }
-function formatMonth(key) { const d = monthDate(key); return MONTHS[d.getMonth()] + " " + d.getFullYear(); }
-function previousMonthKey(key) { const d = monthDate(key); d.setMonth(d.getMonth()-1); return monthKey(d); }
-function getDateForDay(key, day) { const d = monthDate(key); d.setDate(day); return d; }
-function getSafeDefaultDay(key) { return key === CURRENT_MONTH_KEY ? Math.min(DEFAULT_LOG_DATE.getDate(), daysInMonth(key)) : 1; }
-function maxLoggedDay(key) { return key === CURRENT_MONTH_KEY ? Math.min(DEFAULT_LOG_DATE.getDate(), daysInMonth(key)) : daysInMonth(key); }
-function currentViewedDate() { return getDateForDay(selectedMonthKey, selectedDay); }
+function monthKey(d)         { return d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,"0"); }
+function monthDate(key)      { const [y,m] = key.split("-").map(Number); return new Date(y,m-1,1); }
+function daysInMonth(key)    { const d = monthDate(key); return new Date(d.getFullYear(),d.getMonth()+1,0).getDate(); }
+function formatDate(d)       { return d.getDate() + " " + MONTHS[d.getMonth()] + " " + d.getFullYear(); }
+function formatMonth(key)    { const d = monthDate(key); return MONTHS[d.getMonth()] + " " + d.getFullYear(); }
+function formatFullMonth(key){ const d = monthDate(key); return FULL_MONTHS[d.getMonth()] + " " + d.getFullYear(); }
+function getDateForDay(key,day){ const d = monthDate(key); d.setDate(day); return d; }
+function prevMonthKey(key)   { const d = monthDate(key); d.setMonth(d.getMonth()-1); return monthKey(d); }
+function nextMonthKey(key)   { const d = monthDate(key); d.setMonth(d.getMonth()+1); return monthKey(d); }
+function weekKey(d)          { const jan1 = new Date(d.getFullYear(),0,1); return d.getFullYear()+"-W"+String(Math.ceil(((d-jan1)/86400000+jan1.getDay()+1)/7)).padStart(2,"0"); }
+function maxLoggedDay(key)   { return key===CURRENT_MONTH_KEY ? Math.min(DEFAULT_LOG_DATE.getDate(),daysInMonth(key)) : daysInMonth(key); }
+function getSafeDefaultDay(key){ return key===CURRENT_MONTH_KEY ? Math.min(DEFAULT_LOG_DATE.getDate(),daysInMonth(key)) : 1; }
+function isWeekend(dateObj)  { return dateObj.getDay()===0||dateObj.getDay()===6; }
+function isWeekday(dateObj)  { return !isWeekend(dateObj); }
+function yearKeys(year)      { return Array.from({length:12},(_,i)=>year+"-"+String(i+1).padStart(2,"0")); }
 
 // ─── Utilities ────────────────────────────────────────────────────────────────
 
-function escapeHtml(t) { return String(t).replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;"); }
+function uid()    { return Math.random().toString(36).slice(2,10); }
 function clone(o) { return JSON.parse(JSON.stringify(o)); }
-function monthKeys() { return Object.keys(store).sort().reverse(); }
+function escapeHtml(t) { return String(t).replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;"); }
+function debounce(fn, ms) { let t; return (...a) => { clearTimeout(t); t = setTimeout(()=>fn(...a),ms); }; }
+function formatTimestamp() { const d=new Date(); return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); }
+
+// ─── State ────────────────────────────────────────────────────────────────────
+
+let state = {
+  // Log tab
+  logMonthKey:      CURRENT_MONTH_KEY,
+  logDay:           getSafeDefaultDay(CURRENT_MONTH_KEY),
+  // Progress tab
+  progressMonthKey: CURRENT_MONTH_KEY,
+  // Life tab
+  lifeMonthKey:     CURRENT_MONTH_KEY,
+  // Stats tab
+  statsYear:        DEFAULT_LOG_DATE.getFullYear(),
+  statsHabitId:     null,
+  // UI
+  currentTab:       "log",
+  toastState:       null,
+  dialog:           null,
+  onboarding:       false,
+  scoreCache:       {},
+  streakCache:      null,
+};
 
 // ─── Storage ──────────────────────────────────────────────────────────────────
 
-function saveState() {
+// store: { [monthKey]: { days: { [day]: [habitId, ...] }, weight: { [day]: number }, moments: { [day]: string }, skips: { [day]: [habitId,...] } } }
+// meta:  { version, habits, categories, goals, baselineWeight, weightUnit, weeklyReviews: { [weekKey]: string } }
+
+let store = {};
+let meta  = {};
+
+function loadAll() {
+  try { store = JSON.parse(localStorage.getItem(STORE_KEY)) || {}; }
+  catch(e) { store = {}; }
   try {
-    localStorage.setItem("habitV251", JSON.stringify(store));
-    localStorage.setItem("habitMetaV35", JSON.stringify(meta));
-  } catch (e) {
-    showToast("Storage full — export a backup to free up space.", null);
+    const raw = JSON.parse(localStorage.getItem(META_KEY)) || {};
+    meta = migrateMeta(raw);
+  } catch(e) { meta = freshMeta(); }
+}
+
+function freshMeta() {
+  return {
+    version:       APP_VERSION,
+    habits:        clone(DEFAULT_HABITS),
+    categories:    clone(DEFAULT_CATEGORIES),
+    goals:         [],
+    baselineWeight:"",
+    weightUnit:    "kg",
+    weeklyReviews: {}
+  };
+}
+
+function migrateMeta(raw) {
+  // Migrate from v3.x formats
+  if (!raw.version) {
+    // Try to pull habits from old per-month store
+    const oldStore = {};
+    try {
+      const os = JSON.parse(localStorage.getItem("habitV251")) || {};
+      Object.assign(oldStore, os);
+    } catch(e) {}
+    const oldMeta = {};
+    try {
+      const om = JSON.parse(localStorage.getItem("habitMetaV35"))
+              || JSON.parse(localStorage.getItem("habitMetaV34"))
+              || {};
+      Object.assign(oldMeta, om);
+    } catch(e) {}
+
+    // Migrate old store days (stored by habit name) — convert to ids based on name match
+    const migratedHabits = [];
+    const firstMonthKey  = Object.keys(oldStore).sort()[0];
+    const sourceHabits   = firstMonthKey ? (oldStore[firstMonthKey].habits || []) : [];
+
+    sourceHabits.forEach((h,i) => {
+      migratedHabits.push({
+        id:         "mh"+i,
+        name:       h.name,
+        categoryId: h.type === "work" ? "work" : "personal",
+        frequency:  h.type === "work" ? { type: "weekdays" } : { type: "daily" },
+        archived:   h.archived || false
+      });
+    });
+
+    // Migrate store — remap name-keyed days to id-keyed days
+    Object.keys(oldStore).forEach(mk => {
+      const ms = oldStore[mk];
+      store[mk] = { days: {}, weight: ms.weight||{}, moments: ms.moments||{}, skips: {} };
+      Object.keys(ms.days||{}).forEach(day => {
+        store[mk].days[day] = (ms.days[day]||[]).map(name => {
+          const h = migratedHabits.find(x => x.name === name);
+          return h ? h.id : null;
+        }).filter(Boolean);
+      });
+    });
+
+    return {
+      version:       APP_VERSION,
+      habits:        migratedHabits.length ? migratedHabits : clone(DEFAULT_HABITS),
+      categories:    clone(DEFAULT_CATEGORIES),
+      goals:         (oldMeta.goals||[]).map(g => ({ id: uid(), text: g.text||"", progress: g.progress||"", done: g.done||false, dueDate: "" })),
+      baselineWeight: oldMeta.baselineWeight||"",
+      weightUnit:    oldMeta.weightUnit||"kg",
+      weeklyReviews: {}
+    };
+  }
+  // Already v4 format — just ensure all fields exist
+  return {
+    version:       APP_VERSION,
+    habits:        raw.habits        || clone(DEFAULT_HABITS),
+    categories:    raw.categories    || clone(DEFAULT_CATEGORIES),
+    goals:         raw.goals         || [],
+    baselineWeight:raw.baselineWeight|| "",
+    weightUnit:    raw.weightUnit    || "kg",
+    weeklyReviews: raw.weeklyReviews || {}
+  };
+}
+
+function saveAll() {
+  try {
+    localStorage.setItem(STORE_KEY,  JSON.stringify(store));
+    localStorage.setItem(META_KEY,   JSON.stringify(meta));
+    state.scoreCache  = {};
+    state.streakCache = null;
+  } catch(e) {
+    showToast("⚠️ Storage full — export a backup to free up space.", null);
   }
 }
 
 // ─── Month Data ───────────────────────────────────────────────────────────────
 
-function ensureMonth(key) {
-  if (store[key]) {
-    if (!store[key].habits) store[key].habits = clone(DEFAULT_HABITS);
-    if (!store[key].days) store[key].days = {};
-    if (!store[key].weight) store[key].weight = {};
-    if (!store[key].moments) store[key].moments = {};
-    store[key].habits.forEach(h => {
-      if (!h.type) h.type = "personal";
-      if (h.archived === undefined) h.archived = false;
+function monthExists(key)  { return !!store[key]; }
+
+// Only create a month record when we're about to WRITE to it
+function ensureMonthForWrite(key) {
+  if (!store[key]) store[key] = { days:{}, weight:{}, moments:{}, skips:{} };
+  if (!store[key].skips) store[key].skips = {};
+}
+
+function monthData(key) {
+  return store[key] || { days:{}, weight:{}, moments:{}, skips:{} };
+}
+
+function allMonthKeys() { return Object.keys(store).sort().reverse(); }
+
+// ─── Habit & Category Helpers ─────────────────────────────────────────────────
+
+function getHabit(id)      { return meta.habits.find(h=>h.id===id) || null; }
+function getCategory(id)   { return meta.categories.find(c=>c.id===id) || null; }
+function activeHabits()    { return meta.habits.filter(h=>!h.archived); }
+function archivedHabits()  { return meta.habits.filter(h=>h.archived); }
+
+// Is this habit expected on this date given its frequency?
+function habitActiveOnDate(habit, dateObj) {
+  const f = habit.frequency || { type: "daily" };
+  switch(f.type) {
+    case "daily":    return true;
+    case "weekdays": return isWeekday(dateObj);
+    case "weekends": return isWeekend(dateObj);
+    case "xperweek": return true; // always shown; completion is based on weekly count
+    default:         return true;
+  }
+}
+
+// For x-per-week habits: how many times done this week as of dateObj?
+function weeklyDoneCount(habitId, dateObj) {
+  const wk = weekKey(dateObj);
+  let count = 0;
+  // Scan 7 days around dateObj's week
+  for (let offset = -6; offset <= 0; offset++) {
+    const d = new Date(dateObj); d.setDate(d.getDate()+offset);
+    if (weekKey(d) !== wk) continue;
+    const mk  = monthKey(d);
+    const day = d.getDate();
+    const md  = monthData(mk);
+    if (md.days[day]?.includes(habitId)) count++;
+  }
+  return count;
+}
+
+// Is habit "satisfied" for this date? (used for streak & score)
+function habitSatisfied(habitId, key, day) {
+  const md     = monthData(key);
+  const habit  = getHabit(habitId);
+  if (!habit) return false;
+  const dateObj = getDateForDay(key, day);
+  if (!habitActiveOnDate(habit, dateObj)) return true; // not expected = counts as satisfied
+  if (md.skips[day]?.includes(habitId)) return true;   // explicitly skipped
+  const f = habit.frequency || { type: "daily" };
+  if (f.type === "xperweek") {
+    return weeklyDoneCount(habitId, dateObj) >= (f.count||1);
+  }
+  return md.days[day]?.includes(habitId) || false;
+}
+
+// Habits that are expected (shown) on a given date
+function expectedHabitsForDate(key, day) {
+  const dateObj = getDateForDay(key, day);
+  return activeHabits().filter(h => habitActiveOnDate(h, dateObj));
+}
+
+// ─── Scoring ──────────────────────────────────────────────────────────────────
+
+function scoreForMonth(key) {
+  if (state.scoreCache[key] !== undefined) return state.scoreCache[key];
+  let total=0, done=0;
+  for (let day=1; day<=maxLoggedDay(key); day++) {
+    expectedHabitsForDate(key, day).forEach(h => {
+      total++;
+      if (habitSatisfied(h.id, key, day)) done++;
     });
+  }
+  const s = total ? Math.round(done/total*100) : 0;
+  state.scoreCache[key] = s;
+  return s;
+}
+
+function dayComplete(key, day) {
+  const habits = expectedHabitsForDate(key, day);
+  return habits.length > 0 && habits.every(h => habitSatisfied(h.id, key, day));
+}
+
+function dayPartialCount(key, day) {
+  const habits = expectedHabitsForDate(key, day);
+  const done   = habits.filter(h => habitSatisfied(h.id, key, day)).length;
+  return { done, total: habits.length };
+}
+
+// ─── Streaks ──────────────────────────────────────────────────────────────────
+
+function buildStreakData() {
+  if (state.streakCache) return state.streakCache;
+  const keys = allMonthKeys().sort();
+  let current=0, best=0, running=0;
+  let lastWasComplete = false;
+
+  keys.forEach(key => {
+    for (let day=1; day<=maxLoggedDay(key); day++) {
+      if (dayComplete(key,day)) { running++; if (running>best) best=running; lastWasComplete=true; }
+      else { running=0; lastWasComplete=false; }
+    }
+  });
+  current = running; // current streak = running count at end of logged days
+
+  state.streakCache = { current, best };
+  return state.streakCache;
+}
+
+function streakAtRisk() {
+  const { current } = buildStreakData();
+  if (current === 0) return false;
+  return !dayComplete(CURRENT_MONTH_KEY, maxLoggedDay(CURRENT_MONTH_KEY));
+}
+
+// ─── Weekly Review ────────────────────────────────────────────────────────────
+
+function currentWeekKey() { return weekKey(DEFAULT_LOG_DATE); }
+
+function weeklyReviewDue() {
+  const dow = DEFAULT_LOG_DATE.getDay(); // 0=Sun, 5=Fri, 6=Sat
+  if (dow < 5) return false; // Only prompt Friday, Saturday, Sunday
+  const wk = currentWeekKey();
+  return !meta.weeklyReviews[wk];
+}
+
+function saveWeeklyReview(text) {
+  meta.weeklyReviews[currentWeekKey()] = { text, savedAt: new Date().toISOString() };
+  saveAll();
+}
+
+// ─── Habit CRUD ───────────────────────────────────────────────────────────────
+
+function addHabit(name, categoryId, frequency) {
+  const id = uid();
+  meta.habits.push({ id, name, categoryId, frequency, archived: false });
+  saveAll();
+  return id;
+}
+
+function renameHabit(id, newName) {
+  const h = getHabit(id);
+  if (!h) return;
+  h.name = newName;
+  saveAll();
+}
+
+function archiveHabit(id) {
+  const h = getHabit(id); if (!h) return;
+  h.archived = true;
+  saveAll();
+}
+
+function restoreHabit(id) {
+  const h = getHabit(id); if (!h) return;
+  h.archived = false;
+  saveAll();
+}
+
+function deleteHabitPermanently(id) {
+  meta.habits = meta.habits.filter(h => h.id !== id);
+  // Remove all log entries for this habit across all months
+  Object.keys(store).forEach(mk => {
+    const md = store[mk];
+    Object.keys(md.days||{}).forEach(day => {
+      md.days[day] = (md.days[day]||[]).filter(hid => hid !== id);
+    });
+    Object.keys(md.skips||{}).forEach(day => {
+      md.skips[day] = (md.skips[day]||[]).filter(hid => hid !== id);
+    });
+  });
+  saveAll();
+}
+
+function moveHabit(id, direction) {
+  const idx = meta.habits.findIndex(h=>h.id===id);
+  if (idx<0) return;
+  const newIdx = idx+direction;
+  if (newIdx<0||newIdx>=meta.habits.length) return;
+  const tmp = meta.habits[idx]; meta.habits[idx]=meta.habits[newIdx]; meta.habits[newIdx]=tmp;
+  saveAll();
+}
+
+function updateHabitFrequency(id, frequency) {
+  const h = getHabit(id); if (!h) return;
+  h.frequency = frequency;
+  saveAll();
+}
+
+function updateHabitCategory(id, categoryId) {
+  const h = getHabit(id); if (!h) return;
+  h.categoryId = categoryId;
+  saveAll();
+}
+
+// ─── Category CRUD ────────────────────────────────────────────────────────────
+
+function addCategory(name, color) {
+  const id = uid();
+  meta.categories.push({ id, name, color });
+  saveAll();
+  return id;
+}
+
+function renameCategory(id, name) {
+  const c = getCategory(id); if (!c) return;
+  c.name = name; saveAll();
+}
+
+function deleteCategory(id) {
+  // Move all habits in this category to first remaining category
+  const fallback = meta.categories.find(c=>c.id!==id);
+  meta.habits.forEach(h => { if (h.categoryId===id) h.categoryId = fallback?.id||"personal"; });
+  meta.categories = meta.categories.filter(c=>c.id!==id);
+  saveAll();
+}
+
+// ─── Goal CRUD ────────────────────────────────────────────────────────────────
+
+function addGoal(text, dueDate="") {
+  meta.goals.push({ id: uid(), text, progress:"", done:false, dueDate });
+  saveAll();
+}
+
+function updateGoal(id, patch) {
+  const g = meta.goals.find(g=>g.id===id); if (!g) return;
+  Object.assign(g, patch); saveAll();
+}
+
+function deleteGoal(id) {
+  meta.goals = meta.goals.filter(g=>g.id!==id); saveAll();
+}
+
+function toggleGoalDone(id) {
+  const g = meta.goals.find(g=>g.id===id); if (!g) return;
+  g.done = !g.done; saveAll();
+}
+
+// ─── Log Actions ──────────────────────────────────────────────────────────────
+
+function toggleHabit(habitId, key, day) {
+  ensureMonthForWrite(key);
+  const md = store[key];
+  md.days[day] = md.days[day] || [];
+  const before = clone(md.days[day]);
+  if (md.days[day].includes(habitId)) {
+    md.days[day] = md.days[day].filter(x=>x!==habitId);
+  } else {
+    md.days[day] = [...md.days[day], habitId];
+    // Remove skip if was skipped
+    if (md.skips[day]) md.skips[day] = md.skips[day].filter(x=>x!==habitId);
+  }
+  saveAll();
+  if (navigator.vibrate) navigator.vibrate(30);
+  renderLog();
+  showToast("Habit updated", () => {
+    md.days[day] = before; saveAll(); renderLog();
+  });
+}
+
+function toggleSkip(habitId, key, day) {
+  ensureMonthForWrite(key);
+  const md = store[key];
+  md.skips[day] = md.skips[day] || [];
+  if (md.skips[day].includes(habitId)) {
+    md.skips[day] = md.skips[day].filter(x=>x!==habitId);
+  } else {
+    md.skips[day] = [...md.skips[day], habitId];
+    // Remove done if was done
+    if (md.days[day]) md.days[day] = md.days[day].filter(x=>x!==habitId);
+  }
+  saveAll();
+  renderLog();
+}
+
+const saveWeight  = debounce((v, key, day) => { ensureMonthForWrite(key); store[key].weight[day] = v; saveAll(); }, 600);
+const saveMoment  = debounce((v, key, day) => { ensureMonthForWrite(key); store[key].moments[day] = v; saveAll(); }, 600);
+
+// ─── Export / Import ──────────────────────────────────────────────────────────
+
+function exportJSON() {
+  const payload = { version: APP_VERSION, store, meta };
+  const uri = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(payload));
+  const a = document.createElement("a");
+  a.href = uri; a.download = `daymark-backup-${formatTimestamp()}.json`; a.click();
+}
+
+function exportCSV() {
+  const habits = meta.habits.filter(h=>!h.archived);
+  const rows   = [["Date","Habit","Category","Done","Skipped"]];
+  allMonthKeys().sort().forEach(mk => {
+    for (let day=1; day<=maxLoggedDay(mk); day++) {
+      const dateObj  = getDateForDay(mk, day);
+      const md       = monthData(mk);
+      habits.forEach(h => {
+        if (!habitActiveOnDate(h, dateObj)) return;
+        const done    = md.days[day]?.includes(h.id) || false;
+        const skipped = md.skips[day]?.includes(h.id) || false;
+        const cat     = getCategory(h.categoryId);
+        rows.push([formatDate(dateObj), h.name, cat?.name||"", done?"1":"0", skipped?"1":"0"]);
+      });
+    }
+  });
+  const csv = rows.map(r=>r.map(c=>'"'+String(c).replaceAll('"','""')+'"').join(",")).join("\n");
+  const uri = "data:text/csv;charset=utf-8," + encodeURIComponent(csv);
+  const a = document.createElement("a");
+  a.href = uri; a.download = `daymark-export-${formatTimestamp()}.csv`; a.click();
+}
+
+function importJSON(file) {
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    try {
+      const parsed = JSON.parse(reader.result);
+      if (parsed.version && parsed.store && parsed.meta) {
+        store = parsed.store;
+        meta  = parsed.meta;
+      } else if (parsed.store) {
+        store = parsed.store;
+        meta  = migrateMeta(parsed.meta || {});
+      } else {
+        showDialog("Import failed", "The file doesn't look like a valid Daymark backup.", [{label:"OK",action:closeDialog}]);
+        return;
+      }
+      state.logMonthKey      = CURRENT_MONTH_KEY;
+      state.progressMonthKey = CURRENT_MONTH_KEY;
+      state.lifeMonthKey     = CURRENT_MONTH_KEY;
+      state.logDay           = getSafeDefaultDay(CURRENT_MONTH_KEY);
+      saveAll();
+      showToast("Backup imported successfully", null);
+      showTab("log");
+    } catch(e) {
+      showDialog("Import failed", "Could not parse the file. Make sure it's a valid Daymark JSON backup.", [{label:"OK",action:closeDialog}]);
+    }
+  };
+  reader.readAsText(file);
+}
+
+async function checkStorageUsage() {
+  if (!navigator.storage?.estimate) {
+    showDialog("Storage", "Storage estimate not available on this browser.", [{label:"OK",action:closeDialog}]);
     return;
   }
-  const prevKey = previousMonthKey(key);
-  const habits = clone(store[prevKey]?.habits || DEFAULT_HABITS);
-  habits.forEach(h => {
-    if (!h.type) h.type = "personal";
-    if (h.archived === undefined) h.archived = false;
-  });
-  store[key] = {habits, days: {}, weight: {}, moments: {}};
+  const est = await navigator.storage.estimate();
+  const pct = est.quota ? Math.round((est.usage||0)/est.quota*100) : 0;
+  const msg = `Using ${pct}% of available storage (${Math.round((est.usage||0)/1024)}KB of ${Math.round((est.quota||0)/1024/1024)}MB).`
+    + (pct>=80 ? "\n\nWarning: you're approaching the storage limit. Export a backup and consider clearing old data." : "");
+  showDialog("Storage Usage", msg, [{label:"OK",action:closeDialog}]);
 }
 
-ensureMonth(CURRENT_MONTH_KEY);
-
-function monthData(key = selectedMonthKey) { ensureMonth(key); return store[key]; }
-
-// ─── Tab & Toast ──────────────────────────────────────────────────────────────
-
-function setActiveTab(tabName) {
-  currentTab = tabName;
-  document.querySelectorAll(".tab").forEach(tab => tab.classList.toggle("active", tab.dataset.tab === tabName));
-}
+// ─── Toast ────────────────────────────────────────────────────────────────────
 
 function showToast(message, undoFn) {
-  toastState = {message, undoFn};
-  const old = document.getElementById("toast");
-  if (old) old.remove();
+  state.toastState = { message, undoFn };
+  const old = document.getElementById("toast"); if (old) old.remove();
   const div = document.createElement("div");
-  div.id = "toast";
-  div.className = "toast";
+  div.id = "toast"; div.className = "toast";
   div.innerHTML = undoFn
     ? `<span>${escapeHtml(message)}</span><button type="button" onclick="undoToast()">Undo</button>`
     : `<span>${escapeHtml(message)}</span>`;
   document.body.appendChild(div);
   setTimeout(() => {
     const live = document.getElementById("toast");
-    if (live && toastState && toastState.message === message) { toastState = null; live.remove(); }
+    if (live && state.toastState?.message === message) { state.toastState=null; live.remove(); }
   }, 4000);
 }
 
-function clearToast() { toastState = null; const old = document.getElementById("toast"); if (old) old.remove(); }
-function undoToast() { if (!toastState) return; const fn = toastState.undoFn; clearToast(); if (fn) fn(); }
-
-// ─── Habit Logic ──────────────────────────────────────────────────────────────
-
-function activeForDate(h, dateObj) {
-  const weekend = (dateObj.getDay() === 0 || dateObj.getDay() === 6);
-  if (h.type === "work" && weekend) return false;
-  return true;
+function clearToast() {
+  state.toastState = null;
+  const old = document.getElementById("toast"); if (old) old.remove();
 }
 
-function toggleHabit(name, day) {
-  const month = monthData();
-  month.days[day] = month.days[day] || [];
-  const before = clone(month.days[day]);
-  month.days[day] = month.days[day].includes(name)
-    ? month.days[day].filter(x => x !== name)
-    : [...month.days[day], name];
-  saveState();
-  if (navigator.vibrate) navigator.vibrate(30);
-  showToday();
-  showToast("Habit updated", () => { month.days[day] = before; saveState(); showToday(); });
+function undoToast() {
+  if (!state.toastState) return;
+  const fn = state.toastState.undoFn;
+  clearToast(); if (fn) fn();
 }
 
-function setWeight(v, day) { const month = monthData(); month.weight[day] = v; saveState(); }
-function setMoment(v, day) { const month = monthData(); month.moments[day] = v; saveState(); }
+// ─── Dialog ───────────────────────────────────────────────────────────────────
 
-// ─── Scoring & Streaks ────────────────────────────────────────────────────────
-
-function score(key = selectedMonthKey) {
-  const month = monthData(key);
-  let total = 0, done = 0;
-  for (let day = 1; day <= maxLoggedDay(key); day++) {
-    const dateObj = getDateForDay(key, day);
-    month.habits.filter(h => !h.archived && activeForDate(h, dateObj)).forEach(h => {
-      total++;
-      if (month.days[day]?.includes(h.name)) done++;
-    });
-  }
-  return total ? Math.round(done / total * 100) : 0;
+function showDialog(title, message, buttons) {
+  closeDialog();
+  const overlay = document.createElement("div");
+  overlay.id = "dialog-overlay";
+  overlay.className = "dialog-overlay";
+  overlay.innerHTML = `
+    <div class="dialog">
+      <div class="dialog-title">${escapeHtml(title)}</div>
+      <div class="dialog-body">${escapeHtml(message)}</div>
+      <div class="dialog-btns">${
+        buttons.map((b,i)=>`<button class="dialog-btn ${b.danger?'danger':''}" onclick="dialogAction(${i})">${escapeHtml(b.label)}</button>`).join("")
+      }</div>
+    </div>`;
+  document.body.appendChild(overlay);
+  state.dialog = { buttons };
 }
 
-function dayComplete(key, day) {
-  const month = monthData(key);
-  const dateObj = getDateForDay(key, day);
-  const habits = month.habits.filter(h => !h.archived && activeForDate(h, dateObj));
-  return habits.length > 0 && habits.every(h => month.days[day]?.includes(h.name));
+function dialogAction(i) {
+  const btn = state.dialog?.buttons[i];
+  closeDialog();
+  if (btn?.action) btn.action();
 }
 
-function previousDayReference(key, day) {
-  if (day > 1) return {key, day: day-1};
-  const prevKey = previousMonthKey(key);
-  if (!store[prevKey]) return null;
-  return {key: prevKey, day: maxLoggedDay(prevKey)};
+function closeDialog() {
+  const old = document.getElementById("dialog-overlay"); if (old) old.remove();
+  state.dialog = null;
 }
 
-function currentStreak() {
-  let ref = {key: CURRENT_MONTH_KEY, day: maxLoggedDay(CURRENT_MONTH_KEY)}, streak = 0;
-  while (ref && ref.day >= 1) {
-    if (dayComplete(ref.key, ref.day)) { streak++; ref = previousDayReference(ref.key, ref.day); }
-    else break;
-  }
-  return streak;
+// ─── Onboarding ───────────────────────────────────────────────────────────────
+
+function isFirstRun() {
+  return !localStorage.getItem(META_KEY) && !localStorage.getItem("habitV251") && !localStorage.getItem(STORE_KEY);
 }
-
-function bestStreak() {
-  const keys = monthKeys().sort();
-  let best = 0, current = 0;
-  keys.forEach(key => {
-    for (let day = 1; day <= maxLoggedDay(key); day++) {
-      if (dayComplete(key, day)) { current++; if (current > best) best = current; }
-      else current = 0;
-    }
-  });
-  return best;
-}
-
-// ─── Shared UI Fragments ──────────────────────────────────────────────────────
-
-function monthSelector(selectedKey, onchangeFn) {
-  const keys = monthKeys();
-  return `<select onchange="${onchangeFn}(this.value)">${
-    keys.map(key => `<option value="${key}" ${key === selectedKey ? "selected" : ""}>${formatMonth(key)}</option>`).join("")
-  }</select>`;
-}
-
-// ─── Today Tab ────────────────────────────────────────────────────────────────
-
-function daySelectorCard() {
-  const maxDay = selectedMonthKey === CURRENT_MONTH_KEY
-    ? Math.min(DEFAULT_LOG_DATE.getDate(), daysInMonth(selectedMonthKey))
-    : daysInMonth(selectedMonthKey);
-  const options = Array.from({length: maxDay}, (_,i) => i+1).reverse()
-    .map(day => `<option value="${day}" ${day === selectedDay ? "selected" : ""}>${formatDate(getDateForDay(selectedMonthKey, day))}</option>`)
-    .join("");
-  return `<div class="card"><label><strong>Day</strong></label><select onchange="changeDay(this.value)">${options}</select><div class="muted">You can edit previous days here.</div></div>`;
-}
-
-function fullDayCompleteCard() {
-  return dayComplete(selectedMonthKey, selectedDay)
-    ? `<div class="card done-day"><strong>Nice work — full day complete.</strong><div class="muted">All active habits are done for ${formatDate(currentViewedDate())}.</div></div>`
-    : "";
-}
-
-function showToday() {
-  setActiveTab("today");
-  clearToast();
-  const month = monthData();
-  const day = selectedDay;
-  const dayDate = currentViewedDate();
-  let html = daySelectorCard() + fullDayCompleteCard();
-
-  const personal = month.habits.filter(h => !h.archived && h.type !== "work" && activeForDate(h, dayDate));
-  const work = month.habits.filter(h => !h.archived && h.type === "work" && activeForDate(h, dayDate));
-
-  if (personal.length) {
-    html += `<div class="section-title">PERSONAL</div>`;
-    personal.forEach(h => {
-      const done = month.days[day]?.includes(h.name);
-      html += `<div class="habit" onclick='toggleHabit(${JSON.stringify(h.name)},${day})'><div class="dot ${done ? "done" : ""}"></div><div>${escapeHtml(h.name)}</div></div>`;
-    });
-  }
-  if (work.length) {
-    html += `<div class="section-title">WORK</div>`;
-    work.forEach(h => {
-      const done = month.days[day]?.includes(h.name);
-      html += `<div class="habit" onclick='toggleHabit(${JSON.stringify(h.name)},${day})'><div class="dot ${done ? "done" : ""}"></div><div>${escapeHtml(h.name)}</div></div>`;
-    });
-  }
-
-  html += `<div class="card"><h3>Weight</h3><input type="number" step="0.1" value="${month.weight[day] || ""}" onchange="setWeight(this.value,${day})"><div class="unit-label">Unit: ${escapeHtml(meta.weightUnit)}</div><h3>Memorable Moment</h3><textarea onchange="setMoment(this.value,${day})">${month.moments[day] || ""}</textarea></div>`;
-  document.getElementById("content").innerHTML = html;
-}
-
-// ─── Progress Tab ─────────────────────────────────────────────────────────────
-
-// BUG FIX: Progress tab uses its own `progressMonthKey`, fully independent of
-// `selectedMonthKey` used by Log/Life/Settings. Grid data and all stats now always
-// reflect the month shown in the Progress dropdown, regardless of where you've been
-// browsing in other tabs.
-
-function changeProgressMonth(key) {
-  progressMonthKey = key;
-  ensureMonth(key);
-  showProgress();
-}
-
-function summaryCards() {
-  const streakVal = currentStreak();
-  const streakAtRisk = streakVal > 0 && !dayComplete(CURRENT_MONTH_KEY, maxLoggedDay(CURRENT_MONTH_KEY));
-  return `<div class="score-grid">
-    <div class="metric">${score(progressMonthKey)}%<small>Month Score</small></div>
-    <div class="metric" style="${streakAtRisk ? "color:#ff9500" : ""}">${streakVal}<small>Current Streak${streakAtRisk ? " ⚠️" : ""}</small></div>
-    <div class="metric">${bestStreak()}<small>Best Streak</small></div>
-  </div>`;
-}
-
-function goalCard() {
-  if (!meta.goals.length) return `<div class="card"><h3>Goals</h3><div class="muted">No goals added yet.</div></div>`;
-  return `<div class="card"><h3>Goals</h3>${
-    meta.goals.map(g => `<div class="goal-row"><div>${escapeHtml(g.text)}<div class="goal-chip">${escapeHtml(g.progress || "")}</div></div><div>${g.done ? "✅" : "•"}</div></div>`).join("")
-  }</div>`;
-}
-
-function weightSummary() {
-  const month = monthData(progressMonthKey);
-  const entries = Object.keys(month.weight).sort((a,b) => Number(a)-Number(b)).filter(key => String(month.weight[key]).trim() !== "");
-  const current = entries.length ? Number(month.weight[entries[entries.length-1]]) : null;
-  const baseline = meta.baselineWeight !== "" ? Number(meta.baselineWeight) : null;
-  let change = null;
-  if (current !== null && baseline !== null && !Number.isNaN(current) && !Number.isNaN(baseline)) change = (current - baseline).toFixed(1);
-  return {entries, current, baseline, change};
-}
-
-function weightCards() {
-  const {current, baseline, change} = weightSummary();
-  return `<div class="card"><h3>Weight</h3><div class="weight-grid">
-    <div class="metric">${current !== null && !Number.isNaN(current) ? current.toFixed(1) : "—"}<small>Current (${escapeHtml(meta.weightUnit)})</small></div>
-    <div class="metric">${baseline !== null && !Number.isNaN(baseline) ? baseline.toFixed(1) : "—"}<small>Baseline</small></div>
-    <div class="metric">${change !== null ? (change > 0 ? "+" : "") + change : "—"}<small>Change</small></div>
-  </div></div>`;
-}
-
-function weightChart() {
-  const month = monthData(progressMonthKey);
-  const entries = Object.keys(month.weight).sort((a,b) => Number(a)-Number(b)).filter(key => String(month.weight[key]).trim() !== "");
-  if (entries.length < 2) return `<div class="card"><h3>Weight Trend</h3><div class="muted">Add at least 2 weight entries to see a trend.</div></div>`;
-  const values = entries.map(key => Number(month.weight[key])).filter(v => !Number.isNaN(v));
-  if (values.length < 2) return `<div class="card"><h3>Weight Trend</h3><div class="muted">Not enough valid weight entries yet.</div></div>`;
-  // BUG FIX: Use 100% viewBox width so chart scales to any screen size
-  const vw = 400, vh = 180, pad = 18;
-  const min = Math.min(...values), max = Math.max(...values), range = max-min || 1;
-  const xStep = (vw - pad*2) / Math.max(values.length-1, 1);
-  const points = values.map((v,i) => `${pad + i*xStep},${vh-pad-((v-min)/range)*(vh-pad*2)}`).join(" ");
-  const circles = values.map((v,i) => `<circle cx="${pad + i*xStep}" cy="${vh-pad-((v-min)/range)*(vh-pad*2)}" r="3"></circle>`).join("");
-  return `<div class="card"><h3>Weight Trend</h3>
-    <svg class="chart" viewBox="0 0 ${vw} ${vh}" preserveAspectRatio="none">
-      <line x1="${pad}" y1="${vh-pad}" x2="${vw-pad}" y2="${vh-pad}" stroke="#ddd" stroke-width="1"></line>
-      <polyline fill="none" stroke="#007AFF" stroke-width="3" points="${points}"></polyline>
-      <g fill="#007AFF">${circles}</g>
-    </svg>
-    <div class="muted">Latest ${values.length} entries — ${formatMonth(progressMonthKey)}.</div>
-  </div>`;
-}
-
-function monthGrid() {
-  // BUG FIX: Use progressMonthKey (not selectedMonthKey) so the grid shows data
-  // for whatever month its own dropdown controls, fully decoupled from the Log tab.
-  const month = monthData(progressMonthKey);
-  let html = `<div class="card"><div class="inline-row"><div><h3>Month View</h3></div><div><label><strong>Month</strong></label>${monthSelector(progressMonthKey, "changeProgressMonth")}</div></div><div class="muted">Scroll sideways to see the whole month. Tap a cell to jump to that day in Log.</div></div><div class="grid-wrap"><table><tr><th class="habit-name"></th>`;
-  for (let day = 1; day <= daysInMonth(progressMonthKey); day++) html += `<th>${day}</th>`;
-  html += `</tr>`;
-  month.habits.filter(h => !h.archived).forEach((habit, index) => {
-    html += `<tr class="${index % 2 === 1 ? "alt-row" : ""}"><th class="habit-name">${escapeHtml(habit.name)}</th>`;
-    for (let day = 1; day <= daysInMonth(progressMonthKey); day++) {
-      const done = month.days[day]?.includes(habit.name);
-      const isToday = progressMonthKey === CURRENT_MONTH_KEY && day === DEFAULT_LOG_DATE.getDate();
-      html += `<td class="cell ${done ? "done-cell" : "empty-cell"} ${isToday ? "today-cell" : ""}" onclick="jumpToDay('${progressMonthKey}',${day})" title="${formatDate(getDateForDay(progressMonthKey, day))}">${done ? "•" : ""}</td>`;
-    }
-    html += `</tr>`;
-  });
-  return html + `</table></div>`;
-}
-
-function jumpToDay(key, day) {
-  selectedMonthKey = key;
-  selectedDay = day;
-  showToday();
-}
-
-function showProgress() {
-  setActiveTab("progress");
-  clearToast();
-  document.getElementById("content").innerHTML = summaryCards() + goalCard() + weightCards() + weightChart() + monthGrid();
-}
-
-// ─── Life Tab ─────────────────────────────────────────────────────────────────
-
-function showLife() {
-  setActiveTab("life");
-  clearToast();
-  const month = monthData(selectedMonthKey);
-  let html = `<div class="card"><div class="inline-row"><div><h3>Memorable Moments</h3></div><div><label><strong>Month</strong></label>${monthSelector(selectedMonthKey, "changeMonth")}</div></div>`;
-  let has = false;
-  Object.keys(month.moments).sort((a,b) => Number(b)-Number(a)).forEach(day => {
-    if (!String(month.moments[day]).trim()) return;
-    has = true;
-    html += `<div class="list-line" onclick="editLifeMoment(${day})" style="cursor:pointer;"><strong>${formatDate(getDateForDay(selectedMonthKey, Number(day)))}</strong><br>${escapeHtml(month.moments[day])}<div class="muted">Tap to edit</div></div>`;
-  });
-  if (!has) html += `<div class="muted">No memorable moments yet.</div>`;
-  document.getElementById("content").innerHTML = html + `</div>`;
-}
-
-function editLifeMoment(day) { selectedDay = Number(day); showToday(); }
-
-// ─── Settings Tab ─────────────────────────────────────────────────────────────
-
-function toggleHabitType(index) {
-  const month = monthData();
-  month.habits[index].type = month.habits[index].type === "work" ? "personal" : "work";
-  saveState(); showSettings();
-}
-
-function archiveHabit(index) {
-  const month = monthData();
-  const name = month.habits[index].name;
-  const before = clone(month.habits[index]);
-  month.habits[index].archived = true;
-  saveState(); showSettings();
-  showToast(`"${name}" archived`, () => { month.habits[index] = before; saveState(); showSettings(); });
-}
-
-function restoreHabit(index) { const month = monthData(); month.habits[index].archived = false; saveState(); showSettings(); }
-
-function moveHabit(index, direction) {
-  const month = monthData();
-  const newIndex = index + direction;
-  if (newIndex < 0 || newIndex >= month.habits.length) return;
-  const temp = month.habits[index]; month.habits[index] = month.habits[newIndex]; month.habits[newIndex] = temp;
-  saveState(); showSettings();
-}
-
-function addHabit() {
-  const name = document.getElementById("newHabit").value.trim();
-  const type = document.getElementById("habitType").value;
-  const month = monthData();
-  if (!name) { alert("Please enter a habit name."); return; }
-  if (name.length > 40) { alert("Habit names must be 40 characters or fewer."); return; }
-  if (month.habits.some(h => h.name.toLowerCase() === name.toLowerCase())) { alert("That habit name already exists."); return; }
-  month.habits.push({name, archived: false, type});
-  saveState(); showSettings();
-}
-
-function exportData() {
-  const payload = {store, meta};
-  const uri = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(payload));
-  const a = document.createElement("a");
-  a.href = uri; a.download = "daymark-backup.json"; a.click();
-}
-
-function importData(event) {
-  const file = event.target.files[0]; event.target.value = "";
-  if (!file) return;
-  if (!confirm("Import backup? This will overwrite your current data.")) return;
-  const reader = new FileReader();
-  reader.onload = function () {
-    try {
-      const parsed = JSON.parse(reader.result);
-      if (parsed.store) { store = parsed.store; meta = parsed.meta || meta; } else { store = parsed; }
-      Object.keys(store).forEach(key => ensureMonth(key));
-      ensureMonth(CURRENT_MONTH_KEY);
-      if (!meta || typeof meta !== "object") meta = {baselineWeight: "", goals: [], weightUnit: "kg"};
-      if (!Array.isArray(meta.goals)) meta.goals = [];
-      if (!meta.weightUnit) meta.weightUnit = "kg";
-      selectedMonthKey = CURRENT_MONTH_KEY;
-      progressMonthKey = CURRENT_MONTH_KEY;
-      selectedDay = getSafeDefaultDay(selectedMonthKey);
-      saveState(); alert("Backup imported successfully"); showToday();
-    } catch (e) { alert("Import failed. Please choose a valid backup file."); }
-  };
-  reader.readAsText(file);
-}
-
-function setBaselineWeight(value) { meta.baselineWeight = value; saveState(); }
-function setWeightUnit(value) { meta.weightUnit = value; saveState(); }
-
-function saveGoals() {
-  const lines = document.getElementById("goalsText").value.split("\n").map(x => x.trim()).filter(Boolean);
-  const progressLines = document.getElementById("goalsProgress").value.split("\n").map(x => x.trim());
-  meta.goals = lines.map((line, index) => ({text: line, progress: progressLines[index] || "", done: meta.goals[index]?.done || false}));
-  saveState(); showSettings();
-}
-
-function markGoalDone(index) { meta.goals[index].done = !meta.goals[index].done; saveState(); showSettings(); }
-
-async function checkStorageUsage() {
-  if (!navigator.storage || !navigator.storage.estimate) { alert("Storage estimate is not available on this browser."); return; }
-  const est = await navigator.storage.estimate();
-  const usage = est.usage || 0, quota = est.quota || 0, percent = quota ? Math.round((usage/quota)*100) : 0;
-  alert(`Using ${percent}% of available storage.${percent >= 80 ? " Warning: you are getting close to the limit." : ""}`);
-}
-
-function showSettings() {
-  setActiveTab("settings");
-  clearToast();
-  const month = monthData();
-  let html = `<div class="card"><h3>Habits</h3>`;
-  month.habits.forEach((habit, index) => {
-    if (habit.archived) return;
-    html += `<div class="row-actions"><div>${escapeHtml(habit.name)}</div><button class="small-btn" onclick="moveHabit(${index},-1)">↑</button><button class="small-btn" onclick="moveHabit(${index},1)">↓</button><button class="small-btn" onclick="toggleHabitType(${index})">${habit.type === "work" ? "To Personal" : "To Work"}</button><button class="small-btn small-danger" onclick="archiveHabit(${index})">Archive</button></div>`;
-  });
-  const archived = month.habits.map((habit,index) => ({habit,index})).filter(item => item.habit.archived);
-  if (archived.length) {
-    html += `<h3>Archived Habits</h3>`;
-    archived.forEach(({habit,index}) => {
-      html += `<div class="row-actions"><div>${escapeHtml(habit.name)}</div><span></span><span></span><span></span><button class="small-btn small-green" onclick="restoreHabit(${index})">Restore</button></div>`;
-    });
-  }
-  html += `<h3>Add Habit</h3>
-    <input id="newHabit" type="text" maxlength="40" placeholder="New habit">
-    <select id="habitType"><option value="personal">Personal</option><option value="work">Work</option></select>
-    <button class="btn" onclick="addHabit()">Add Habit</button>
-    <h3>Goals</h3>
-    <div class="muted">One goal per line. Add optional tracking notes in the second box.</div>
-    <textarea id="goalsText" placeholder="Read 20 books&#10;Build 2 apps&#10;Run half marathon">${meta.goals.map(g => g.text).join("\n")}</textarea>
-    <textarea id="goalsProgress" placeholder="6 / 20&#10;1 / 2&#10;Training weekly">${meta.goals.map(g => g.progress || "").join("\n")}</textarea>
-    <button class="btn" onclick="saveGoals()">Save Goals</button>
-    ${meta.goals.length ? meta.goals.map((g,index) => `<div class="goal-row"><div>${escapeHtml(g.text)}</div><button class="btn secondary" onclick="markGoalDone(${index})">${g.done ? "Mark Active" : "Mark Done"}</button></div>`).join("") : ""}
-    <h3>Weight Settings</h3>
-    <div class="inline-row">
-      <div><label><strong>Baseline</strong></label><input type="number" step="0.1" value="${meta.baselineWeight || ""}" onchange="setBaselineWeight(this.value)" placeholder="e.g. 80.0"></div>
-      <div><label><strong>Unit</strong></label><select onchange="setWeightUnit(this.value)"><option value="kg" ${meta.weightUnit === "kg" ? "selected" : ""}>kg</option><option value="lbs" ${meta.weightUnit === "lbs" ? "selected" : ""}>lbs</option></select></div>
-    </div>
-    <h3>Backup</h3>
-    <button class="btn secondary" onclick="exportData()">Export Backup</button>
-    <input type="file" onchange="importData(event)">
-    <button class="btn secondary" onclick="checkStorageUsage()">Check Local Storage Usage</button>
-    <div class="muted">Version 3.52</div>
-  </div>`;
-  document.getElementById("content").innerHTML = html;
-}
-
-// ─── Navigation ───────────────────────────────────────────────────────────────
-
-function changeMonth(key) {
-  selectedMonthKey = key;
-  ensureMonth(key);
-  selectedDay = getSafeDefaultDay(key);
-  if (currentTab === "today") showToday();
-  else if (currentTab === "life") showLife();
-  else if (currentTab === "settings") showSettings();
-  else showProgress();
-}
-
-function changeDay(value) { selectedDay = Number(value); showToday(); }
-
-// ─── Init ─────────────────────────────────────────────────────────────────────
-
-saveState();
-showToday();
