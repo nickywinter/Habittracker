@@ -211,16 +211,24 @@ label { font-size: 13px; color: var(--muted); margin-top: 6px; display: block; }
 }
 
 /* ── Day picker ── */
-.day-picker { display: flex; flex-direction: column; gap: 4px; }
+.day-picker { display: flex; flex-direction: column; gap: 6px; }
 .day-picker-row {
-  display: flex; align-items: center; gap: 10px;
-  padding: 10px 8px; border-radius: 8px; cursor: pointer;
-  font-size: 15px; border: 1px solid var(--border);
+  display: flex; align-items: center; gap: 12px;
+  padding: 12px; border-radius: 10px; cursor: pointer;
+  font-size: 15px; border: 2px solid var(--border);
   background: var(--card);
+  -webkit-tap-highlight-color: transparent;
+  transition: border-color .15s, background .15s;
+  user-select: none;
+}
+.day-picker-row:has(input:checked) {
+  border-color: var(--accent);
+  background: var(--blue-soft, rgba(0,122,255,0.06));
 }
 .day-picker-row input[type="checkbox"] {
-  width: 18px; height: 18px; margin: 0; flex-shrink: 0;
-  accent-color: var(--accent);
+  width: 20px; height: 20px; margin: 0; flex-shrink: 0;
+  accent-color: var(--accent); cursor: pointer;
+  pointer-events: none;
 }
 
 /* ── Category badge ── */

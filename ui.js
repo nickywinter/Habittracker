@@ -1100,10 +1100,11 @@ function openDayPickerDialog(habitId, habitName, categoryId, selectedDays) {
     {n:3,l:"Wednesday"},{n:4,l:"Thursday"},{n:5,l:"Friday"},{n:6,l:"Saturday"}
   ];
   const checkboxes = days.map(d => `
-    <label class="day-picker-row">
-      <input type="checkbox" value="${d.n}" ${selectedDays.includes(d.n)?"checked":""}>
-      ${d.l}
-    </label>`).join("");
+    <div class="day-picker-row" onclick="this.querySelector('input').click();event.stopPropagation()">
+      <input type="checkbox" id="dp-${d.n}" value="${d.n}" ${selectedDays.includes(d.n)?"checked":""}
+        onclick="event.stopPropagation()">
+      <label for="dp-${d.n}" style="flex:1;cursor:pointer;pointer-events:none">${d.l}</label>
+    </div>`).join("");
 
   showCustomDialog("Choose days", `
     <div class="muted" style="margin-bottom:10px">Which days should this habit appear?</div>
