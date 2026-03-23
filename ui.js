@@ -941,6 +941,26 @@ function openEditHabitDialog(id) {
     ["daily","Daily"],["weekdays","Weekdays only"],["weekends","Weekends only"],["specificdays","Specific days"]
   ].map(([v,l])=>`<option value="${v}" ${v===f.type?"selected":""}>${l}</option>`).join("");
 
+  const isSpecific = f.type === "specificdays";
+  const buttons = [
+    { label: "Save", action: () => {
+      const name = document.getElementById("ed-name")?.value?.trim();
+      if (!name) { showToast("Name can't be empty", null); return; }
+      renameHabit(id, name);
+      updateHabitCategory(id, document.getElementById("ed-cat").value);
+      const ftype = document.getElementById("ed-freq").value;
+      if (ftype === "specificdays") {
+        // Open day picker — use setTimeout so this dialog fully closes first
+        const existingDays = ftype === f.type ? (f.days||[]) : [];
+        setTimeout(() => openDayPickerDialog(id, name, null, existingDays), 50);
+        return;
+      }
+      updateHabitFrequency(id, { type: ftype });
+      renderSettings();
+    }},
+    { label: "Cancel", action: closeDialog }
+  ];
+
   showCustomDialog("Edit Habit", `
     <label>Name</label>
     <input id="ed-name" type="text" maxlength="40" value="${escapeHtml(h.name)}">
@@ -948,26 +968,8 @@ function openEditHabitDialog(id) {
     <select id="ed-cat">${catOpts}</select>
     <label style="margin-top:8px;display:block">Frequency</label>
     <select id="ed-freq">${freqOpts}</select>
-    ${f.type==="specificdays" ? `<div class="muted" style="margin-top:6px;font-size:12px">Current days: ${freqLabel(f)} — save first, then edit to change days.</div>` : ""}
-  `, [
-    { label: "Save", action: () => {
-      const name = document.getElementById("ed-name")?.value?.trim();
-      if (!name) { showToast("Name can't be empty", null); return; }
-      renameHabit(id, name);
-      updateHabitCategory(id, document.getElementById("ed-cat").value);
-      const ftype = document.getElementById("ed-freq").value;
-      if (ftype === "specificdays" && f.type !== "specificdays") {
-        // Switching to specific days — open day picker
-        closeDialog();
-        openDayPickerDialog(id, name, null);
-        return;
-      }
-      updateHabitFrequency(id, { type: ftype });
-      renderSettings();
-    }},
-    { label: "Change days", action: () => { closeDialog(); openDayPickerDialog(id, h.name, null, f.days||[]); }, },
-    { label: "Cancel", action: closeDialog }
-  ]);
+    ${isSpecific ? `<div class="muted" style="margin-top:6px;font-size:12px">Current days: ${freqLabel(f)}</div>` : ""}
+  `, buttons);
 }
 
 function openArchiveDialog(id) {
@@ -1074,8 +1076,8 @@ function submitAddHabit() {
   const catId = document.getElementById("new-habit-cat")?.value || meta.categories[0]?.id;
   const ftype = document.getElementById("new-habit-freq")?.value || "daily";
   if (ftype === "specificdays") {
-    // Open day picker dialog before adding
-    openDayPickerDialog(null, name, catId);
+    // Open day picker dialog — setTimeout so any existing state clears first
+    setTimeout(() => openDayPickerDialog(null, name, catId, []), 50);
     return;
   }
   addHabit(name, catId, { type: ftype });
