@@ -1123,34 +1123,49 @@ function renderOnboarding(step) {
       renderOnboarding(2);
       return;
     }
-    const installInstructions = isIOS
-      ? `<div class="ob-install-steps">
-           <div class="ob-install-step"><span class="ob-step-num">1</span>Tap the <strong>Share button</strong> <span class="ob-icon">⬆</span> at the bottom of Safari</div>
-           <div class="ob-install-step"><span class="ob-step-num">2</span>Scroll down and tap <strong>Add to Home Screen</strong></div>
-           <div class="ob-install-step"><span class="ob-step-num">3</span>Tap <strong>Add</strong> in the top right</div>
-           <div class="ob-install-step"><span class="ob-step-num">4</span>Open Daymark from your home screen</div>
-         </div>
-         <div class="ob-note">⚠️ Must use Safari — Chrome and Firefox on iPhone don't support this</div>`
-      : isAndroid
-      ? `<div class="ob-install-steps">
-           <div class="ob-install-step"><span class="ob-step-num">1</span>Tap the <strong>three dots</strong> menu in Chrome</div>
-           <div class="ob-install-step"><span class="ob-step-num">2</span>Tap <strong>Add to Home screen</strong></div>
-           <div class="ob-install-step"><span class="ob-step-num">3</span>Tap <strong>Add</strong> when prompted</div>
-           <div class="ob-install-step"><span class="ob-step-num">4</span>Open Daymark from your home screen</div>
-         </div>`
-      : `<div class="ob-note">On mobile, add this to your home screen for the best experience. On desktop you can continue in the browser.</div>`;
+
+    // Device-specific instructions — clean and minimal
+    let installSteps = "";
+    let installNote  = "";
+    let deviceLabel  = "";
+
+    if (isIOS) {
+      deviceLabel = "iPhone / iPad";
+      installSteps = `
+        <div class="ob-install-step"><span class="ob-step-num">1</span>Tap <strong>Share ⬆</strong> at the bottom of Safari</div>
+        <div class="ob-install-step"><span class="ob-step-num">2</span>Tap <strong>Add to Home Screen</strong></div>
+        <div class="ob-install-step"><span class="ob-step-num">3</span>Tap <strong>Add</strong> — then open from your home screen</div>`;
+      installNote = "Must use Safari — it won't work from Chrome or Firefox on iPhone.";
+    } else if (isAndroid) {
+      deviceLabel = "Android";
+      installSteps = `
+        <div class="ob-install-step"><span class="ob-step-num">1</span>Tap the <strong>⋮ menu</strong> in Chrome</div>
+        <div class="ob-install-step"><span class="ob-step-num">2</span>Tap <strong>Add to Home screen</strong></div>
+        <div class="ob-install-step"><span class="ob-step-num">3</span>Tap <strong>Add</strong> — then open from your home screen</div>`;
+      installNote = "Works with Chrome, Samsung Internet, and Firefox.";
+    } else {
+      installSteps = `<div class="ob-note">On mobile, add to your home screen for the best experience. On desktop, continue in the browser.</div>`;
+    }
 
     html = `
       <div class="onboarding">
         <div class="ob-logo">◆</div>
         <h2>Welcome to Daymark</h2>
         <p class="ob-tagline">Mark your day. Then move on.</p>
+
         <div class="ob-install-card">
-          <div class="ob-install-title">📱 Install for the best experience</div>
-          <p class="ob-install-desc">Adding to your home screen keeps your data safe and makes Daymark feel like a native app — full screen, offline, no browser bar.</p>
-          ${installInstructions}
+          <div class="ob-install-header">
+            <span class="ob-install-icon">📲</span>
+            <div>
+              <div class="ob-install-title">Add to Home Screen</div>
+              ${deviceLabel ? `<div class="ob-install-device">${deviceLabel}</div>` : ""}
+            </div>
+          </div>
+          <div class="ob-install-steps" style="margin-top:12px">${installSteps}</div>
+          ${installNote ? `<div class="ob-note" style="margin-top:10px">${installNote}</div>` : ""}
         </div>
-        <button class="btn" onclick="renderOnboarding(2)" style="margin-top:16px">I've added it to my home screen →</button>
+
+        <button class="btn" onclick="renderOnboarding(2)" style="margin-top:16px">Done — let's go →</button>
         <button class="btn secondary" onclick="renderOnboarding(2)" style="margin-top:8px">Skip for now</button>
       </div>`;
 

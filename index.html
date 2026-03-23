@@ -412,11 +412,15 @@ h3 { margin: 14px 0 4px; font-size: 15px; }
     padding: 16px; margin-bottom: 4px;
     border: 1px solid var(--border);
   }
-  .ob-install-title {
-    font-weight: 700; font-size: 15px; margin-bottom: 8px;
+  .ob-install-header {
+    display: flex; align-items: center; gap: 12px;
   }
-  .ob-install-desc {
-    font-size: 14px; color: var(--muted); margin-bottom: 14px; line-height: 1.5;
+  .ob-install-icon { font-size: 28px; flex-shrink: 0; }
+  .ob-install-title {
+    font-weight: 700; font-size: 16px; line-height: 1.2;
+  }
+  .ob-install-device {
+    font-size: 12px; color: var(--muted); margin-top: 2px;
   }
   .ob-install-steps { display: flex; flex-direction: column; gap: 10px; }
   .ob-install-step {
@@ -432,8 +436,7 @@ h3 { margin: 14px 0 4px; font-size: 15px; }
   }
   .ob-icon { font-size: 16px; }
   .ob-note {
-    margin-top: 12px; font-size: 13px;
-    color: var(--muted); line-height: 1.5;
+    font-size: 13px; color: var(--muted); line-height: 1.5;
     background: var(--bg); border-radius: 8px; padding: 8px 10px;
   }
 
